@@ -127,6 +127,17 @@ async function seedCatalogs() {
     await prisma.customerRank.upsert({ where: { code: r.code }, update: {}, create: r });
   }
 
+  const suppliers = [
+    { name: 'Granja Avícola El Rosal', taxId: '1023456019', phone: '70011122', contactName: 'Rosa Mamani', address: 'Carretera al Norte km 12' },
+    { name: 'Avícola SOFIA Distribución', taxId: '1028765011', phone: '70033344', contactName: 'Luis Vargas', address: 'Parque Industrial, mza. 4' },
+    { name: 'Granja San Pedro', taxId: '4567890', phone: '70055566', contactName: 'Pedro Quispe', address: 'Comunidad San Pedro' },
+  ];
+  for (const s of suppliers) {
+    // supplier no tiene campo único; se busca por nombre para que el seed siga siendo idempotente.
+    const exists = await prisma.supplier.findFirst({ where: { name: s.name } });
+    if (!exists) await prisma.supplier.create({ data: s });
+  }
+
   const sequences = [
     { name: 'purchase', prefix: 'C-' },
     { name: 'sale', prefix: 'V-' },
