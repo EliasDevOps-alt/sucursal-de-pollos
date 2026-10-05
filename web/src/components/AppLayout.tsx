@@ -1,0 +1,80 @@
+import { AppShell, Avatar, Burger, Group, NavLink, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+import {
+  IconBuildingWarehouse,
+  IconLayoutDashboard,
+  IconLogout,
+  IconPackage,
+  IconShoppingCart,
+  IconTruckDelivery,
+} from '@tabler/icons-react';
+import { NavLink as RouterLink, Outlet, useLocation } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+
+const NAV = [
+  { to: '/', label: 'Inicio', icon: IconLayoutDashboard, permission: null },
+  { to: '/compras', label: 'Compras', icon: IconShoppingCart, permission: 'purchases.view' },
+  { to: '/lotes', label: 'Lotes e inventario', icon: IconBuildingWarehouse, permission: 'lots.view' },
+  { to: '/productos', label: 'Productos', icon: IconPackage, permission: 'catalog.view' },
+  { to: '/proveedores', label: 'Proveedores', icon: IconTruckDelivery, permission: 'catalog.view' },
+];
+
+export function AppLayout() {
+  const [opened, { toggle, close }] = useDisclosure();
+  const { user, can, logout } = useAuth();
+  const { pathname } = useLocation();
+
+  const isActive = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to));
+
+  return (
+    <AppShell
+      header={{ height: 56 }}
+      navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !opened } }}
+      padding="md"
+    >
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between">
+          <Group gap="sm">
+            <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
+            <Title order={4}>🐔 ERP Pollos</Title>
+          </Group>
+          <Group gap="xs">
+            <Avatar color="orange" radius="xl" size="sm">
+              {user?.fullName.charAt(0)}
+            </Avatar>
+            <div style={{ lineHeight: 1.1 }}>
+              <Text size="sm" fw={500}>{user?.fullName}</Text>
+              <Text size="xs" c="dimmed">{user?.roleName}</Text>
+            </div>
+          </Group>
+        </Group>
+      </AppShell.Header>
+
+      <AppShell.Navbar p="xs">
+        <Stack gap={2} style={{ flex: 1 }}>
+          {NAV.filter((n) => !n.permission || can(n.permission)).map((n) => (
+            <NavLink
+              key={n.to}
+              component={RouterLink}
+              to={n.to}
+              label={n.label}
+              leftSection={<n.icon size={18} stroke={1.6} />}
+              active={isActive(n.to)}
+              onClick={close}
+            />
+          ))}
+        </Stack>
+        <UnstyledButton onClick={logout} p="xs">
+          <Group gap="xs">
+            <IconLogout size={18} stroke={1.6} />
+            <Text size="sm">Cerrar sesión</Text>
+          </Group>
+        </UnstyledButton>
+      </AppShell.Navbar>
+
+      <AppShell.Main>
+        <Outlet />
+      </AppShell.Main>
+    </AppShell>
+  );
+}
