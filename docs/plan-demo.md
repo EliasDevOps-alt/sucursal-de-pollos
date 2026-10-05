@@ -21,7 +21,7 @@ Fuera de la demo (fases siguientes): rutas, entregas con firma, GPS, cobranza, c
 | Fase | Entregable | Estado |
 |---|---|---|
 | A | Monorepo, esquema de BD, migraciones, seed, login, roles y permisos | Completada |
-| B | Proveedores, productos, compra, recepción, merma, lotes | Pendiente |
+| B | Proveedores, productos, compra, recepción, merma, lotes (API + panel web) | Completada |
 | C | Kardex, stock por lote, venta FEFO multi-lote | Pendiente |
 | D | Reportes y dashboard | Pendiente |
 | E | App Flutter: preventa offline + sincronización | Pendiente |
