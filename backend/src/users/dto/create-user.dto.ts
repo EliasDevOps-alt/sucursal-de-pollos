@@ -1,0 +1,40 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEmail, IsOptional, IsString, IsUUID, Matches, MinLength } from 'class-validator';
+
+export class CreateUserDto {
+  @ApiProperty({ example: 'jperez' })
+  @IsString()
+  @Matches(/^[a-z0-9._-]{3,30}$/, {
+    message: 'El usuario debe tener 3–30 caracteres: minúsculas, números, punto, guion o guion bajo',
+  })
+  username: string;
+
+  @ApiProperty({ example: 'Clave123!' })
+  @IsString()
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  password: string;
+
+  @ApiProperty({ example: 'Juan Pérez' })
+  @IsString()
+  @MinLength(3)
+  fullName: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiProperty({ description: 'ID del rol' })
+  @IsUUID()
+  roleId: string;
+
+  @ApiPropertyOptional({ description: 'Sucursal asignada (vendedor de sucursal)' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+}

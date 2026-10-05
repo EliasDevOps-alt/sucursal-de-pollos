@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+*.log
+.DS_Store
+Thumbs.db
+
+# Flutter
+mobile/**/.dart_tool/
+mobile/**/.flutter-plugins
+mobile/**/.flutter-plugins-dependencies
+mobile/**/build/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
