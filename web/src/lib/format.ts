@@ -5,6 +5,9 @@ const unitFmt = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maxim
 
 export const fmtBob = (v: string | number | null | undefined) => (v == null ? '—' : `Bs ${bob.format(Number(v))}`);
 export const fmtKg = (v: string | number | null | undefined) => (v == null ? '—' : `${kgFmt.format(Number(v))} kg`);
+const kgShortFmt = new Intl.NumberFormat('es-BO', { maximumFractionDigits: 1 });
+/** Kilos con a lo sumo un decimal, para indicadores y alertas. */
+export const fmtKgShort = (v: string | number | null | undefined) => (v == null ? '—' : `${kgShortFmt.format(Number(v))} kg`);
 export const fmtPerKg = (v: string | number | null | undefined) => (v == null ? '—' : `Bs ${unitFmt.format(Number(v))}/kg`);
 export const fmtPct = (v: string | number | null | undefined) => (v == null ? '—' : `${kgFmt.format(Number(v))} %`);
 

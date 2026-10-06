@@ -10,10 +10,10 @@ import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/PageHeader';
 import { QueryState } from '../components/QueryState';
 import { ChartCard } from '../components/viz/ChartCard';
-import { axisFormatterBob, BAR_MAX, chartChrome, horizontalBars, surfaceGap } from '../components/viz/chartDefaults';
+import { axisFormatterBob, BAR_MAX, chartChrome, compactBob, horizontalBars, surfaceGap } from '../components/viz/chartDefaults';
 import { presetRange, RangePicker, RangePreset } from '../components/viz/RangePicker';
 import { StatTile } from '../components/viz/StatTile';
-import { expiryColor, expiryLabel, fmtBob, fmtDate, fmtKg, fmtPct } from '../lib/format';
+import { expiryColor, expiryLabel, fmtBob, fmtDate, fmtKg, fmtKgShort, fmtPct } from '../lib/format';
 
 const dayLabel = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
@@ -44,6 +44,9 @@ function ManagementDashboard() {
   const noSales = (data?.salesByDay ?? []).every((d) => d.count === 0);
   const top = (data?.topProducts ?? []).map((p) => ({ producto: p.label, Ventas: Number(p.revenue), raw: p }));
   const alerts = data?.alerts;
+  const MAX_ALERTS = 7;
+  const shownLots = (alerts?.expiringLots ?? []).slice(0, Math.max(0, MAX_ALERTS - (alerts?.lowStock.length ?? 0)));
+  const hiddenLots = (alerts?.expiringLots.length ?? 0) - shownLots.length;
 
   return (
     <>
@@ -56,14 +59,14 @@ function ManagementDashboard() {
         {data && k && (
           <Stack>
             <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }}>
-              <StatTile label="Ventas" value={fmtBob(k.revenue)} delta={k.revenueDeltaPercentage} hint={`${k.salesCount} ventas · ${fmtKg(k.kgSold)}`} />
+              <StatTile label="Ventas" value={fmtBob(k.revenue)} delta={k.revenueDeltaPercentage} hint={`${k.salesCount} ventas · ${fmtKgShort(k.kgSold)}`} />
               {financial ? (
                 <StatTile label="Margen bruto" value={fmtBob(k.margin)} delta={k.marginDeltaPercentage} hint={`${fmtPct(k.marginPercentage)} sobre ventas`} />
               ) : (
                 <StatTile label="Ticket promedio" value={fmtBob(k.averageTicket)} />
               )}
               <StatTile label="Por cobrar" value={fmtBob(k.receivables)} hint={k.debtors === 1 ? '1 cliente con deuda' : `${k.debtors} clientes con deuda`} />
-              <StatTile label="Stock disponible" value={fmtKg(k.stockKg)} hint={financial ? `${fmtBob(k.stockValue)} a costo real` : undefined} />
+              <StatTile label="Stock disponible" value={fmtKgShort(k.stockKg)} hint={financial ? `${fmtBob(k.stockValue)} a costo real` : undefined} />
             </SimpleGrid>
 
             <ChartCard
@@ -134,6 +137,7 @@ function ManagementDashboard() {
                       maxBarWidth={BAR_MAX}
                       barProps={{ radius: [0, 4, 4, 0] }}
                       withBarValueLabel
+                      valueLabelProps={{ formatter: (v: unknown) => compactBob(Number(v)), width: 90 }}
                       valueFormatter={(v) => fmtBob(v)}
                       yAxisProps={{ width: 140 }}
                       xAxisProps={{ tickFormatter: axisFormatterBob }}
@@ -151,11 +155,11 @@ function ManagementDashboard() {
                     {alerts && alerts.expiringLots.length === 0 && alerts.lowStock.length === 0 && (
                       <Text size="sm" c="dimmed">Sin alertas: no hay lotes por vencer ni productos bajo el mínimo.</Text>
                     )}
-                    {alerts?.expiringLots.map((l) => (
+                    {shownLots.map((l) => (
                       <Group key={l.id} justify="space-between" gap="xs">
                         <div>
                           <Anchor component={Link} to={`/lotes/${l.id}`} fw={600} size="sm">{l.lotCode}</Anchor>
-                          <Text size="xs" c="dimmed">{l.product} · {fmtKg(l.weightKg)} · {l.warehouse}</Text>
+                          <Text size="xs" c="dimmed">{l.product} · {fmtKgShort(l.weightKg)} · {l.warehouse}</Text>
                         </div>
                         <Badge
                           variant="light"
@@ -170,11 +174,16 @@ function ManagementDashboard() {
                       <Group key={p.id} justify="space-between" gap="xs">
                         <div>
                           <Text fw={600} size="sm">{p.name}</Text>
-                          <Text size="xs" c="dimmed">{fmtKg(p.stockKg)} disponibles · mínimo {fmtKg(p.minStockKg)}</Text>
+                          <Text size="xs" c="dimmed">{fmtKgShort(p.stockKg)} disponibles · mínimo {fmtKgShort(p.minStockKg)}</Text>
                         </div>
                         <Badge variant="light" color="orange" leftSection={<IconPackageOff size={12} />}>Stock bajo</Badge>
                       </Group>
                     ))}
+                    {hiddenLots > 0 && (
+                      <Anchor component={Link} to="/inventario" size="sm">
+                        y {hiddenLots} lote{hiddenLots === 1 ? '' : 's'} más por vencer · ver inventario
+                      </Anchor>
+                    )}
                   </Stack>
                 </Card>
               </Grid.Col>

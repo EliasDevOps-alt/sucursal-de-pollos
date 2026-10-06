@@ -8,7 +8,7 @@ import type { Profitability, ReceivablesReport, ShrinkageReport } from '../api/t
 import { PageHeader } from '../components/PageHeader';
 import { QueryState } from '../components/QueryState';
 import { ChartCard } from '../components/viz/ChartCard';
-import { axisFormatterBob, BAR_MAX, chartChrome, horizontalBars } from '../components/viz/chartDefaults';
+import { axisFormatterBob, BAR_MAX, chartChrome, compactBob, horizontalBars } from '../components/viz/chartDefaults';
 import { presetRange, RangePicker, RangePreset } from '../components/viz/RangePicker';
 import { StatTile } from '../components/viz/StatTile';
 import { fmtBob, fmtDate, fmtDateTime, fmtKg, fmtPct, TREATMENT_LABELS } from '../lib/format';
@@ -71,6 +71,7 @@ function ProfitabilityTab({ range }: { range: { from: string; to: string } }) {
                   maxBarWidth={BAR_MAX}
                   barProps={{ radius: [0, 4, 4, 0] }}
                   withBarValueLabel
+                  valueLabelProps={{ formatter: (v: unknown) => compactBob(Number(v)), width: 90 }}
                   valueFormatter={(v) => fmtBob(v)}
                   yAxisProps={{ width: 150 }}
                   xAxisProps={{ tickFormatter: axisFormatterBob }}

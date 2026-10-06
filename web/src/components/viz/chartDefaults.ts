@@ -6,6 +6,10 @@ export const axisFormatterBob = (v: number) =>
   Math.abs(v) >= 1000 ? `${(v / 1000).toLocaleString('es-BO', { maximumFractionDigits: 1 })} mil` : v.toLocaleString('es-BO');
 
 // Ojo: en Mantine gridAxis='x' dibuja lineas horizontales (columnas) y 'y' verticales (barras horizontales).
+/** Etiqueta corta para el extremo de una barra: "Bs 57,0 mil". */
+export const compactBob = (v: number) =>
+  Math.abs(v) >= 1000 ? `Bs ${(v / 1000).toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mil` : `Bs ${Math.round(v)}`;
+
 export const chartChrome = {
   gridAxis: 'x' as const,
   tickLine: 'none' as const,

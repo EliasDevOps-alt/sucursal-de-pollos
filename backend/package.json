@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed": "prisma db seed",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo:data": "ts-node scripts/demo-data.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
