@@ -48,7 +48,7 @@ enum ExpirySource {
 }
 
 enum ShrinkageTreatment {
-  ABSORB      // la merma se registra como pérdida; el costo por kg no cambia
+  ABSORB // la merma se registra como pérdida; el costo por kg no cambia
   INCORPORATE // la merma se reparte en el costo real del kg recibido
 }
 
@@ -90,11 +90,18 @@ enum SaleStatus {
 }
 
 enum PresaleStatus {
-  PENDING    // registrada, aún modificable
-  CONFIRMED  // aceptada por administración
-  ASSIGNED   // asignada a ruta, ya no modificable
+  PENDING // registrada, aún modificable
+  CONFIRMED // aceptada por administración
+  ASSIGNED // asignada a ruta, ya no modificable
   DELIVERED
   CANCELLED
+}
+
+enum ReceivableMovementType {
+  CHARGE // venta a crédito (aumenta la deuda)
+  PAYMENT // pago del cliente (reduce la deuda)
+  ANNUL // reversión por anulación de venta
+  ADJUSTMENT
 }
 
 enum CustomerStatus {
@@ -164,20 +171,24 @@ model User {
   role   Role    @relation(fields: [roleId], references: [id])
   branch Branch? @relation(fields: [branchId], references: [id])
 
-  auditLogs           AuditLog[]
-  purchasesCreated    Purchase[]          @relation("PurchaseCreatedBy")
-  purchasesAnnulled   Purchase[]          @relation("PurchaseAnnulledBy")
-  receptions          Reception[]
-  inventoryMovements  InventoryMovement[]
-  customersCreated    Customer[]
-  addressesCaptured   CustomerAddress[]
-  sales               Sale[]              @relation("SaleSeller")
-  salesAnnulled       Sale[]              @relation("SaleAnnulledBy")
-  lotOverrides        SaleLotAllocation[]
-  presales            Presale[]
-  devices             Device[]
-  syncOperations      SyncOperation[]
-  lotPrices           LotPrice[]
+  auditLogs            AuditLog[]
+  purchasesCreated     Purchase[]           @relation("PurchaseCreatedBy")
+  purchasesAnnulled    Purchase[]           @relation("PurchaseAnnulledBy")
+  receptions           Reception[]
+  inventoryMovements   InventoryMovement[]
+  customersCreated     Customer[]
+  addressesCaptured    CustomerAddress[]
+  sales                Sale[]               @relation("SaleSeller")
+  salesAnnulled        Sale[]               @relation("SaleAnnulledBy")
+  lotOverrides         SaleLotAllocation[]
+  creditAuthorizations Sale[]               @relation("SaleCreditAuthorizedBy")
+  priceAuthorizations  SaleItem[]
+  paymentsReceived     Payment[]
+  receivableMovements  ReceivableMovement[]
+  presales             Presale[]
+  devices              Device[]
+  syncOperations       SyncOperation[]
+  lotPrices            LotPrice[]
 
   @@map("users")
 }
@@ -245,7 +256,7 @@ model Warehouse {
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
 
-  branch             Branch?            @relation(fields: [branchId], references: [id])
+  branch             Branch?             @relation(fields: [branchId], references: [id])
   purchases          Purchase[]
   receptions         Reception[]
   lots               Lot[]
@@ -399,19 +410,19 @@ model Reception {
 }
 
 model ReceptionItem {
-  id                  String        @id @default(uuid()) @db.Uuid
-  receptionId         String        @map("reception_id") @db.Uuid
-  purchaseItemId      String        @unique @map("purchase_item_id") @db.Uuid
-  productId           String        @map("product_id") @db.Uuid
-  receivedWeightKg    Decimal       @map("received_weight_kg") @db.Decimal(14, 3) // peso bruto en balanza
-  receivedQuantity    Decimal       @default(0) @map("received_quantity") @db.Decimal(14, 3)
-  canastilloWeightKg  Decimal       @default(0) @map("canastillo_weight_kg") @db.Decimal(14, 3) // tara
-  netReceivedWeightKg Decimal       @map("net_received_weight_kg") @db.Decimal(14, 3) // bruto - tara
-  shrinkageWeightKg   Decimal       @map("shrinkage_weight_kg") @db.Decimal(14, 3) // comprado - neto
-  shrinkagePercentage Decimal       @map("shrinkage_percentage") @db.Decimal(6, 2)
-  expiryDate          DateTime      @map("expiry_date") @db.Date
-  expirySource        ExpirySource  @default(SUPPLIER) @map("expiry_source")
-  qualityNotes        String?       @map("quality_notes")
+  id                  String       @id @default(uuid()) @db.Uuid
+  receptionId         String       @map("reception_id") @db.Uuid
+  purchaseItemId      String       @unique @map("purchase_item_id") @db.Uuid
+  productId           String       @map("product_id") @db.Uuid
+  receivedWeightKg    Decimal      @map("received_weight_kg") @db.Decimal(14, 3) // peso bruto en balanza
+  receivedQuantity    Decimal      @default(0) @map("received_quantity") @db.Decimal(14, 3)
+  canastilloWeightKg  Decimal      @default(0) @map("canastillo_weight_kg") @db.Decimal(14, 3) // tara
+  netReceivedWeightKg Decimal      @map("net_received_weight_kg") @db.Decimal(14, 3) // bruto - tara
+  shrinkageWeightKg   Decimal      @map("shrinkage_weight_kg") @db.Decimal(14, 3) // comprado - neto
+  shrinkagePercentage Decimal      @map("shrinkage_percentage") @db.Decimal(6, 2)
+  expiryDate          DateTime     @map("expiry_date") @db.Date
+  expirySource        ExpirySource @default(SUPPLIER) @map("expiry_source")
+  qualityNotes        String?      @map("quality_notes")
 
   reception    Reception    @relation(fields: [receptionId], references: [id])
   purchaseItem PurchaseItem @relation(fields: [purchaseItemId], references: [id])
@@ -422,24 +433,24 @@ model ReceptionItem {
 }
 
 model Lot {
-  id                 String             @id @default(uuid()) @db.Uuid
-  lotCode            String             @unique @map("lot_code")
-  productId          String             @map("product_id") @db.Uuid
-  purchaseId         String             @map("purchase_id") @db.Uuid
-  receptionId        String             @map("reception_id") @db.Uuid
-  receptionItemId    String             @unique @map("reception_item_id") @db.Uuid
-  warehouseId        String             @map("warehouse_id") @db.Uuid // ubicación inicial
-  receivedWeightKg   Decimal            @map("received_weight_kg") @db.Decimal(14, 3) // peso neto que entra a stock
-  receivedQuantity   Decimal            @default(0) @map("received_quantity") @db.Decimal(14, 3)
-  originalCostTotal  Decimal            @map("original_cost_total") @db.Decimal(14, 2)
-  originalCostPerKg  Decimal            @map("original_cost_per_kg") @db.Decimal(14, 4) // costo del kg comprado
-  actualCostPerKg    Decimal            @map("actual_cost_per_kg") @db.Decimal(14, 4) // costo usado en rentabilidad
-  shrinkageWeightKg  Decimal            @default(0) @map("shrinkage_weight_kg") @db.Decimal(14, 3)
-  shrinkageLossAmount Decimal           @default(0) @map("shrinkage_loss_amount") @db.Decimal(14, 2)
-  shrinkageTreatment ShrinkageTreatment @map("shrinkage_treatment")
-  expiryDate         DateTime           @map("expiry_date") @db.Date
-  status             LotStatus          @default(ACTIVE)
-  createdAt          DateTime           @default(now()) @map("created_at")
+  id                  String             @id @default(uuid()) @db.Uuid
+  lotCode             String             @unique @map("lot_code")
+  productId           String             @map("product_id") @db.Uuid
+  purchaseId          String             @map("purchase_id") @db.Uuid
+  receptionId         String             @map("reception_id") @db.Uuid
+  receptionItemId     String             @unique @map("reception_item_id") @db.Uuid
+  warehouseId         String             @map("warehouse_id") @db.Uuid // ubicación inicial
+  receivedWeightKg    Decimal            @map("received_weight_kg") @db.Decimal(14, 3) // peso neto que entra a stock
+  receivedQuantity    Decimal            @default(0) @map("received_quantity") @db.Decimal(14, 3)
+  originalCostTotal   Decimal            @map("original_cost_total") @db.Decimal(14, 2)
+  originalCostPerKg   Decimal            @map("original_cost_per_kg") @db.Decimal(14, 4) // costo del kg comprado
+  actualCostPerKg     Decimal            @map("actual_cost_per_kg") @db.Decimal(14, 4) // costo usado en rentabilidad
+  shrinkageWeightKg   Decimal            @default(0) @map("shrinkage_weight_kg") @db.Decimal(14, 3)
+  shrinkageLossAmount Decimal            @default(0) @map("shrinkage_loss_amount") @db.Decimal(14, 2)
+  shrinkageTreatment  ShrinkageTreatment @map("shrinkage_treatment")
+  expiryDate          DateTime           @map("expiry_date") @db.Date
+  status              LotStatus          @default(ACTIVE)
+  createdAt           DateTime           @default(now()) @map("created_at")
 
   product            Product             @relation(fields: [productId], references: [id])
   purchase           Purchase            @relation(fields: [purchaseId], references: [id])
@@ -546,12 +557,14 @@ model Customer {
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
-  customerType CustomerType      @relation(fields: [customerTypeId], references: [id])
-  rank         CustomerRank?     @relation(fields: [rankId], references: [id])
-  createdBy    User?             @relation(fields: [createdById], references: [id])
-  addresses    CustomerAddress[]
-  sales        Sale[]
-  presales     Presale[]
+  customerType        CustomerType         @relation(fields: [customerTypeId], references: [id])
+  rank                CustomerRank?        @relation(fields: [rankId], references: [id])
+  createdBy           User?                @relation(fields: [createdById], references: [id])
+  addresses           CustomerAddress[]
+  sales               Sale[]
+  presales            Presale[]
+  payments            Payment[]
+  receivableMovements ReceivableMovement[]
 
   @@map("customers")
 }
@@ -581,32 +594,38 @@ model CustomerAddress {
 // ─────────────────────────────────────────────────────────────
 
 model Sale {
-  id             String        @id @default(uuid()) @db.Uuid
-  saleNumber     String        @unique @map("sale_number")
-  customerId     String?       @map("customer_id") @db.Uuid // null = venta rápida
-  warehouseId    String        @map("warehouse_id") @db.Uuid
-  branchId       String?       @map("branch_id") @db.Uuid
-  sellerId       String        @map("seller_id") @db.Uuid
-  saleMode       SaleMode      @map("sale_mode")
-  subtotal       Decimal       @db.Decimal(14, 2)
-  discountAmount Decimal       @default(0) @map("discount_amount") @db.Decimal(14, 2)
-  totalAmount    Decimal       @map("total_amount") @db.Decimal(14, 2)
-  currency       String        @default("BOB")
-  paymentStatus  PaymentStatus @map("payment_status")
-  status         SaleStatus    @default(CONFIRMED)
-  notes          String?
-  createdAt      DateTime      @default(now()) @map("created_at")
-  annulledAt     DateTime?     @map("annulled_at")
-  annulledById   String?       @map("annulled_by_id") @db.Uuid
-  annulReason    String?       @map("annul_reason")
+  id                    String        @id @default(uuid()) @db.Uuid
+  saleNumber            String        @unique @map("sale_number")
+  customerId            String?       @map("customer_id") @db.Uuid // null = venta rápida
+  warehouseId           String        @map("warehouse_id") @db.Uuid
+  branchId              String?       @map("branch_id") @db.Uuid
+  sellerId              String        @map("seller_id") @db.Uuid
+  saleMode              SaleMode      @map("sale_mode")
+  subtotal              Decimal       @db.Decimal(14, 2)
+  discountAmount        Decimal       @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  totalAmount           Decimal       @map("total_amount") @db.Decimal(14, 2)
+  currency              String        @default("BOB")
+  paymentStatus         PaymentStatus @map("payment_status")
+  paidAmount            Decimal       @default(0) @map("paid_amount") @db.Decimal(14, 2) // pagado al momento de la venta
+  creditAmount          Decimal       @default(0) @map("credit_amount") @db.Decimal(14, 2) // saldo cargado a la deuda
+  status                SaleStatus    @default(CONFIRMED)
+  creditAuthorizedById  String?       @map("credit_authorized_by_id") @db.Uuid // excepción al límite de crédito
+  creditExceptionReason String?       @map("credit_exception_reason")
+  notes                 String?
+  createdAt             DateTime      @default(now()) @map("created_at")
+  annulledAt            DateTime?     @map("annulled_at")
+  annulledById          String?       @map("annulled_by_id") @db.Uuid
+  annulReason           String?       @map("annul_reason")
 
-  customer   Customer?  @relation(fields: [customerId], references: [id])
-  warehouse  Warehouse  @relation(fields: [warehouseId], references: [id])
-  branch     Branch?    @relation(fields: [branchId], references: [id])
-  seller     User       @relation("SaleSeller", fields: [sellerId], references: [id])
-  annulledBy User?      @relation("SaleAnnulledBy", fields: [annulledById], references: [id])
-  items      SaleItem[]
-  presale    Presale?
+  customer           Customer?  @relation(fields: [customerId], references: [id])
+  warehouse          Warehouse  @relation(fields: [warehouseId], references: [id])
+  branch             Branch?    @relation(fields: [branchId], references: [id])
+  seller             User       @relation("SaleSeller", fields: [sellerId], references: [id])
+  annulledBy         User?      @relation("SaleAnnulledBy", fields: [annulledById], references: [id])
+  creditAuthorizedBy User?      @relation("SaleCreditAuthorizedBy", fields: [creditAuthorizedById], references: [id])
+  items              SaleItem[]
+  presale            Presale?
+  payments           Payment[]
 
   @@index([customerId, createdAt])
   @@index([createdAt])
@@ -614,19 +633,22 @@ model Sale {
 }
 
 model SaleItem {
-  id                String  @id @default(uuid()) @db.Uuid
-  saleId            String  @map("sale_id") @db.Uuid
-  productId         String  @map("product_id") @db.Uuid
-  requestedWeightKg Decimal @map("requested_weight_kg") @db.Decimal(14, 3)
-  requestedQuantity Decimal @default(0) @map("requested_quantity") @db.Decimal(14, 3)
-  originalUnitPrice Decimal @map("original_unit_price") @db.Decimal(14, 4) // precio sugerido
-  unitPrice         Decimal @map("unit_price") @db.Decimal(14, 4) // precio final aplicado
-  discountAmount    Decimal @default(0) @map("discount_amount") @db.Decimal(14, 2)
-  subtotal          Decimal @db.Decimal(14, 2)
+  id                  String  @id @default(uuid()) @db.Uuid
+  saleId              String  @map("sale_id") @db.Uuid
+  productId           String  @map("product_id") @db.Uuid
+  requestedWeightKg   Decimal @map("requested_weight_kg") @db.Decimal(14, 3)
+  requestedQuantity   Decimal @default(0) @map("requested_quantity") @db.Decimal(14, 3)
+  originalUnitPrice   Decimal @map("original_unit_price") @db.Decimal(14, 4) // precio sugerido
+  unitPrice           Decimal @map("unit_price") @db.Decimal(14, 4) // precio final aplicado
+  discountAmount      Decimal @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  subtotal            Decimal @db.Decimal(14, 2) // después del descuento
+  priceChangeReason   String? @map("price_change_reason")
+  priceAuthorizedById String? @map("price_authorized_by_id") @db.Uuid
 
-  sale        Sale                @relation(fields: [saleId], references: [id])
-  product     Product             @relation(fields: [productId], references: [id])
-  allocations SaleLotAllocation[]
+  sale              Sale                @relation(fields: [saleId], references: [id])
+  product           Product             @relation(fields: [productId], references: [id])
+  priceAuthorizedBy User?               @relation(fields: [priceAuthorizedById], references: [id])
+  allocations       SaleLotAllocation[]
 
   @@map("sale_items")
 }
@@ -694,6 +716,51 @@ model PresaleItem {
   product Product @relation(fields: [productId], references: [id])
 
   @@map("presale_items")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Pagos y cuentas por cobrar (mínimo para ventas a crédito)
+// ─────────────────────────────────────────────────────────────
+
+// Un pago tiene un solo método; un pago combinado se registra como varios pagos.
+model Payment {
+  id              String   @id @default(uuid()) @db.Uuid
+  customerId      String?  @map("customer_id") @db.Uuid
+  saleId          String?  @map("sale_id") @db.Uuid
+  amount          Decimal  @db.Decimal(14, 2)
+  paymentMethod   String   @map("payment_method")
+  paymentSource   String   @default("CENTRAL") @map("payment_source") // CENTRAL/BRANCH/DRIVER/COLLECTOR
+  receivedById    String   @map("received_by_id") @db.Uuid
+  paymentDate     DateTime @default(now()) @map("payment_date")
+  referenceNumber String?  @map("reference_number")
+  notes           String?
+
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  sale       Sale?     @relation(fields: [saleId], references: [id])
+  receivedBy User      @relation(fields: [receivedById], references: [id])
+
+  @@index([customerId, paymentDate])
+  @@map("payments")
+}
+
+// Historial de la deuda: customers.current_debt es la suma de estos movimientos.
+model ReceivableMovement {
+  id            String                 @id @default(uuid()) @db.Uuid
+  customerId    String                 @map("customer_id") @db.Uuid
+  movementType  ReceivableMovementType @map("movement_type")
+  amount        Decimal                @db.Decimal(14, 2) // + aumenta la deuda, − la reduce
+  balanceAfter  Decimal                @map("balance_after") @db.Decimal(14, 2)
+  referenceType String                 @map("reference_type")
+  referenceId   String                 @map("reference_id") @db.Uuid
+  reason        String?
+  createdById   String                 @map("created_by_id") @db.Uuid
+  createdAt     DateTime               @default(now()) @map("created_at")
+
+  customer  Customer @relation(fields: [customerId], references: [id])
+  createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@index([customerId, createdAt])
+  @@map("receivable_movements")
 }
 
 // ─────────────────────────────────────────────────────────────

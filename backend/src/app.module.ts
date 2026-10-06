@@ -5,6 +5,7 @@ import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CommonModule } from './common/common.module';
+import { CustomersModule } from './customers/customers.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { HealthController } from './health.controller';
@@ -12,6 +13,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { LotsModule } from './lots/lots.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PurchasesModule } from './purchases/purchases.module';
+import { SalesModule } from './sales/sales.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -26,6 +28,8 @@ import { UsersModule } from './users/users.module';
     CatalogModule,
     PurchasesModule,
     LotsModule,
+    CustomersModule,
+    SalesModule,
   ],
   controllers: [HealthController],
   providers: [

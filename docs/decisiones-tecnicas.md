@@ -13,3 +13,9 @@ Desviaciones y precisiones respecto al *Documento de Diseño de Base de Datos v1
 9. **Precio por lote.** `lot_prices` guarda el precio sugerido por lote y sucursal; `sale_items` conserva `original_unit_price` y `unit_price` para auditar cambios de precio.
 10. **Offline idempotente.** `sync_operations.device_operation_id` y `presales.device_operation_id` son únicos: reenviar la misma operación no la duplica.
 11. **Ambigüedades del documento resueltas:** referencias polimórficas con `reference_type` + `reference_id`; `presales.sale_id` enlaza la preventa con la venta que la atiende.
+12. **Stock controlado por kg.** Las unidades (pollos) se registran como dato informativo en compras y ventas; el saldo que se valida y bloquea es el peso.
+13. **Venta multi-lote.** Cada línea se reparte entre lotes (FEFO por defecto) en `sale_lot_allocations`, que congela el costo real y el precio de cada porción. La rentabilidad sale de ahí.
+14. **Excepciones con autorización.** Forzar un lote fuera de FEFO, cambiar el precio sugerido o superar el límite de crédito requieren el permiso correspondiente y un motivo. Si el vendedor no tiene el permiso, un supervisor autoriza en el momento ingresando sus credenciales; queda registrado quién autorizó.
+15. **Deuda por movimientos.** Se añadieron `payments` y `receivable_movements` (mínimos) para que `customers.current_debt` nunca cambie sin un movimiento que lo respalde.
+16. **Anulación de venta.** Devuelve el stock a los mismos lotes (movimiento `SALE_ANNUL`) y revierte la parte a crédito. El reembolso de lo cobrado queda anotado en auditoría; el módulo de caja está fuera de la demo.
+17. **Lotes vencidos** no se ofrecen ni se pueden vender; siguen contando en el stock hasta darse de baja.

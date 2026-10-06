@@ -14,17 +14,22 @@ export class AuthService {
   ) {}
 
   async login(username: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { username } });
+    const user = await this.verifyCredentials(username, password);
     // Mismo mensaje para usuario inexistente y contraseña errónea: no revela qué usuarios existen.
-    if (!user || !user.isActive || !(await bcrypt.compare(password, user.passwordHash))) {
-      throw new UnauthorizedException('Usuario o contraseña incorrectos');
-    }
+    if (!user) throw new UnauthorizedException('Usuario o contraseña incorrectos');
 
     const payload: JwtPayload = { sub: user.id, username: user.username };
     const accessToken = await this.jwt.signAsync(payload);
     await this.audit.log({ userId: user.id, action: 'auth.login', entityType: 'user', entityId: user.id });
 
-    return { accessToken, user: await this.loadAuthUser(user.id) };
+    return { accessToken, user };
+  }
+
+  /** Devuelve el usuario si las credenciales son válidas y está activo; si no, null. */
+  async verifyCredentials(username: string, password: string): Promise<AuthUser | null> {
+    const user = await this.prisma.user.findUnique({ where: { username } });
+    if (!user || !user.isActive || !(await bcrypt.compare(password, user.passwordHash))) return null;
+    return this.loadAuthUser(user.id);
   }
 
   async loadAuthUser(userId: string): Promise<AuthUser | null> {
