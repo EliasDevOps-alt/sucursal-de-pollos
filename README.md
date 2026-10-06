@@ -57,4 +57,5 @@ Requiere la API en marcha. Conserva usuarios, productos, proveedores y almacenes
 - [docs/despliegue.md](docs/despliegue.md) — despliegue y respaldos
 - [docs/decisiones-tecnicas.md](docs/decisiones-tecnicas.md) — decisiones de diseño y desviaciones del documento de base de datos
 - [docs/plan-demo.md](docs/plan-demo.md) — fases de la demo
+- [docs/cobertura-alcance.md](docs/cobertura-alcance.md) — qué cubre la demo frente al alcance del MVP y qué falta
 - [mobile/README.md](mobile/README.md) — app de preventa
