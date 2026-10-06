@@ -189,6 +189,7 @@ model User {
   devices              Device[]
   syncOperations       SyncOperation[]
   lotPrices            LotPrice[]
+  gpsPositions         GpsPosition[]
 
   @@map("users")
 }
@@ -690,6 +691,10 @@ model Presale {
   deviceOperationId     String?       @unique @map("device_operation_id") @db.Uuid
   createdAtDevice       DateTime?     @map("created_at_device")
   saleId                String?       @unique @map("sale_id") @db.Uuid // venta que atendió el pedido
+  latitude              Decimal?      @db.Decimal(10, 7) // dónde se tomó el pedido
+  longitude             Decimal?      @db.Decimal(10, 7)
+  cancelledAt           DateTime?     @map("cancelled_at")
+  cancelReason          String?       @map("cancel_reason")
   createdAt             DateTime      @default(now()) @map("created_at")
   updatedAt             DateTime      @updatedAt @map("updated_at")
 
@@ -779,6 +784,7 @@ model Device {
   createdAt      DateTime        @default(now()) @map("created_at")
   user           User            @relation(fields: [userId], references: [id])
   syncOperations SyncOperation[]
+  gpsPositions   GpsPosition[]
 
   @@map("devices")
 }
@@ -801,4 +807,24 @@ model SyncOperation {
   user   User   @relation(fields: [userId], references: [id])
 
   @@map("sync_operations")
+}
+
+// GPS del teléfono: por evento (pedido, alta de cliente) o periódico (~10 min). No es GPS vehicular.
+model GpsPosition {
+  id               String   @id @default(uuid()) @db.Uuid
+  deviceId         String   @map("device_id") @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  latitude         Decimal  @db.Decimal(10, 7)
+  longitude        Decimal  @db.Decimal(10, 7)
+  accuracyMeters   Decimal? @map("accuracy_meters") @db.Decimal(8, 2)
+  eventType        String   @map("event_type") // PERIODIC / PRESALE / CUSTOMER_CREATE / VISIT
+  referenceId      String?  @map("reference_id") @db.Uuid
+  capturedAtDevice DateTime @map("captured_at_device")
+  receivedAtServer DateTime @default(now()) @map("received_at_server")
+
+  device Device @relation(fields: [deviceId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([userId, capturedAtDevice])
+  @@map("gps_positions")
 }

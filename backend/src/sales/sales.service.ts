@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import {
   CustomerStatus,
   InventoryMovementType,
+  PresaleStatus,
   PaymentStatus,
   Prisma,
   ReceivableMovementType,
@@ -161,6 +162,17 @@ export class SalesService {
       const creditIssue = issues.find((i) => i.type === 'CREDIT_LIMIT');
       const priceIssue = (idx: number) => issues.find((i) => i.type === 'PRICE_CHANGE' && i.lineIndex === idx);
 
+      // Atender una preventa: se bloquea y debe seguir pendiente y ser del mismo cliente.
+      if (dto.presaleId) {
+        const [presale] = await tx.$queryRaw<{ status: PresaleStatus; customer_id: string; presale_number: string }[]>`
+          SELECT status, customer_id, presale_number FROM presales WHERE id = ${dto.presaleId}::uuid FOR UPDATE`;
+        if (!presale) throw new BadRequestException('Preventa inexistente');
+        if (presale.status !== PresaleStatus.PENDING && presale.status !== PresaleStatus.CONFIRMED) {
+          throw new ConflictException(`La preventa ${presale.presale_number} ya fue atendida o cancelada`);
+        }
+        if (presale.customer_id !== built.customer?.id) throw new BadRequestException('La venta debe ser para el cliente de la preventa');
+      }
+
       const saleNumber = await this.sequences.next(tx, 'sale');
       const sale = await tx.sale.create({
         data: {
@@ -169,7 +181,7 @@ export class SalesService {
           warehouseId: built.warehouse.id,
           branchId: built.warehouse.branchId,
           sellerId: actor.id,
-          saleMode: built.saleMode,
+          saleMode: dto.presaleId ? SaleMode.PRESALE : built.saleMode,
           subtotal: built.subtotal,
           discountAmount: built.discount,
           totalAmount: built.total,
@@ -241,8 +253,12 @@ export class SalesService {
         await this.receivable(tx, built.customer!.id, ReceivableMovementType.CHARGE, built.credit, sale.id, actor.id);
       }
 
+      if (dto.presaleId) {
+        await tx.presale.update({ where: { id: dto.presaleId }, data: { status: PresaleStatus.DELIVERED, saleId: sale.id } });
+      }
+
       await this.audit.log(
-        { userId: actor.id, action: 'sales.create', entityType: 'sale', entityId: sale.id, newData: { saleNumber, total: built.total, paymentStatus: built.paymentStatus } },
+        { userId: actor.id, action: 'sales.create', entityType: 'sale', entityId: sale.id, newData: { saleNumber, total: built.total, paymentStatus: built.paymentStatus, presaleId: dto.presaleId } },
         tx,
       );
       for (const issue of issues) {

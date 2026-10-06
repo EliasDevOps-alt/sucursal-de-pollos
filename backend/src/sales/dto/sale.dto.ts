@@ -126,6 +126,11 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Preventa que esta venta atiende' })
+  @IsOptional()
+  @IsUUID()
+  presaleId?: string;
 }
 
 export class SaleFiltersDto {

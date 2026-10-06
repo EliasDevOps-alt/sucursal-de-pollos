@@ -13,14 +13,15 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
-  async login(username: string, password: string) {
+  async login(username: string, password: string, client: 'web' | 'mobile' = 'web') {
     const user = await this.verifyCredentials(username, password);
     // Mismo mensaje para usuario inexistente y contraseña errónea: no revela qué usuarios existen.
     if (!user) throw new UnauthorizedException('Usuario o contraseña incorrectos');
 
     const payload: JwtPayload = { sub: user.id, username: user.username };
-    const accessToken = await this.jwt.signAsync(payload);
-    await this.audit.log({ userId: user.id, action: 'auth.login', entityType: 'user', entityId: user.id });
+    // El preventista puede pasar días sin señal: su token dura más para no perder la sesión offline.
+    const accessToken = await this.jwt.signAsync(payload, client === 'mobile' ? { expiresIn: '7d' } : {});
+    await this.audit.log({ userId: user.id, action: 'auth.login', entityType: 'user', entityId: user.id, newData: { client } });
 
     return { accessToken, user };
   }

@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({ example: 'admin' })
@@ -11,4 +11,9 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty()
   password: string;
+
+  @ApiPropertyOptional({ enum: ['web', 'mobile'], description: 'mobile emite un token de 7 días para trabajar sin conexión' })
+  @IsOptional()
+  @IsIn(['web', 'mobile'])
+  client?: 'web' | 'mobile';
 }

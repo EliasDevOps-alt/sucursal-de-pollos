@@ -11,6 +11,8 @@ import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { HealthController } from './health.controller';
 import { InventoryModule } from './inventory/inventory.module';
 import { LotsModule } from './lots/lots.module';
+import { MobileModule } from './mobile/mobile.module';
+import { PresalesModule } from './presales/presales.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { ReportsModule } from './reports/reports.module';
@@ -32,6 +34,8 @@ import { UsersModule } from './users/users.module';
     CustomersModule,
     SalesModule,
     ReportsModule,
+    PresalesModule,
+    MobileModule,
   ],
   controllers: [HealthController],
   providers: [

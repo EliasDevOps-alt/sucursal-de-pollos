@@ -15,7 +15,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(200)
   login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.username, dto.password);
+    return this.auth.login(dto.username, dto.password, dto.client);
   }
 
   @ApiBearerAuth()
