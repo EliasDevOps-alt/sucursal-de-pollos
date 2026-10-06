@@ -156,7 +156,8 @@ export class MobileService {
       customerName: p.customer.name,
       totalAmount: p.totalAmount,
       scheduledDeliveryDate: p.scheduledDeliveryDate,
-      createdAt: p.createdAt,
+      // Hora en que el preventista tomó el pedido (no la de llegada al servidor).
+      createdAt: p.createdAtDevice ?? p.createdAt,
       cancelReason: p.cancelReason,
       saleNumber: p.sale?.saleNumber ?? null,
       saleTotal: p.sale?.totalAmount ?? null,

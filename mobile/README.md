@@ -28,6 +28,17 @@ En la pantalla de ingreso, **Servidor** permite configurar la API:
 
 Usuario de demo: `preventista` / `Demo123!`.
 
+### Si la compilación falla con `PKIX path building failed`
+
+Un antivirus que inspecciona HTTPS (por ejemplo, Avast Web Shield) firma las conexiones con su propio certificado, en el que Java no confía. Para compilar sin desactivarlo, indique a Java que use los certificados de Windows:
+
+```powershell
+$env:JAVA_TOOL_OPTIONS = '-Djavax.net.ssl.trustStoreType=Windows-ROOT'
+flutter build apk --debug
+```
+
+`android/gradle.properties` desactiva la compilación incremental de Kotlin porque falla cuando el proyecto y la caché de pub están en unidades distintas (por ejemplo, `E:` y `C:`).
+
 ## Pruebas
 
 ```bash
@@ -35,6 +46,8 @@ flutter analyze
 flutter test test/sync_integration_test.dart       # requiere el backend en localhost:3000
 flutter test --update-goldens --tags golden        # regenera capturas en test/goldens/
 ```
+
+Verificado también en el emulador de Android 16: inicio de sesión, pedido tomado sin red y envío automático al recuperar la conexión.
 
 La prueba de integración usa el mismo código de la app contra el servidor real: pedido sin señal, reenvío tras una respuesta perdida (sin duplicar) y rechazo del servidor.
 
