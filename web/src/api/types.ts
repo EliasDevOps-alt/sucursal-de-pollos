@@ -451,3 +451,22 @@ export interface PresaleDetail extends Omit<PresaleListItem, '_count' | 'sale'> 
   sale: { id: string; saleNumber: string; totalAmount: Dec } | null;
   items: { id: string; productId: string; weightKg: Dec; quantity: Dec; unitPrice: Dec; subtotal: Dec; notes: string | null; product: Ref }[];
 }
+
+// ── Cobranza ───────────────────────────────────────────────
+export interface Collection {
+  id: string;
+  receiptNumber: string;
+  amount: Dec;
+  paymentMethod: string;
+  paymentSource: string;
+  paymentDate: string;
+  referenceNumber: string | null;
+  notes: string | null;
+  isAdvance: boolean;
+  status: 'VALID' | 'ANNULLED';
+  annulledAt: string | null;
+  annulReason: string | null;
+  annulledBy: { fullName: string } | null;
+  customer: { id: string; code: string; name: string; currentDebt: Dec };
+  receivedBy: { id: string; fullName: string };
+}

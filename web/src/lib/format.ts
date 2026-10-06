@@ -74,7 +74,7 @@ export const SALE_STATUS: Record<string, { label: string; color: string }> = {
 
 export const RECEIVABLE_LABELS: Record<string, string> = {
   CHARGE: 'Venta a crédito',
-  PAYMENT: 'Pago',
+  PAYMENT: 'Cobro',
   ANNUL: 'Anulación de venta',
   ADJUSTMENT: 'Ajuste',
 };

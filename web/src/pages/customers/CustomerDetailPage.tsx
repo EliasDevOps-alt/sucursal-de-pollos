@@ -1,5 +1,5 @@
 import { Anchor, Badge, Button, Card, Group, Modal, NumberInput, Select, SimpleGrid, Stack, Switch, Table, Text, Textarea, Title } from '@mantine/core';
-import { IconArrowLeft, IconEdit } from '@tabler/icons-react';
+import { IconArrowLeft, IconCash, IconEdit } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { fmtBob, fmtDateTime, fmtPct, PAYMENT_STATUS, RECEIVABLE_LABELS, SALE_STATUS } from '../../lib/format';
 import { notifyError, notifyOk } from '../../lib/notify';
+import { CollectionModal } from '../collections/CollectionModal';
 import { useCustomerCatalogs } from './CustomersPage';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -27,6 +28,7 @@ export function CustomerDetailPage() {
   const qc = useQueryClient();
   const { ranks } = useCustomerCatalogs();
   const [editing, setEditing] = useState(false);
+  const [collecting, setCollecting] = useState(false);
   const [rankId, setRankId] = useState<string | null>(null);
   const [creditEnabled, setCreditEnabled] = useState(false);
   const [creditLimit, setCreditLimit] = useState<number | string>(0);
@@ -74,9 +76,14 @@ export function CustomerDetailPage() {
             title={c.name}
             subtitle={`${c.code} · ${c.customerType.name}`}
             actions={
-              can('customer.rank_change') && (
-                <Button variant="light" leftSection={<IconEdit size={16} />} onClick={openEdit}>Rango y crédito</Button>
-              )
+              <>
+                {can('collections.create') && (
+                  <Button leftSection={<IconCash size={16} />} onClick={() => setCollecting(true)}>Registrar cobro</Button>
+                )}
+                {can('customer.rank_change') && (
+                  <Button variant="light" leftSection={<IconEdit size={16} />} onClick={openEdit}>Rango y crédito</Button>
+                )}
+              </>
             }
           />
 
@@ -94,7 +101,11 @@ export function CustomerDetailPage() {
               <Stack gap="xs">
                 <Field label="Estado">{c.creditEnabled ? 'Habilitado' : 'Sin crédito'}</Field>
                 <Field label="Límite">{fmtBob(c.creditLimit)}</Field>
-                <Field label="Deuda actual"><Text span fw={700} c={Number(c.currentDebt) > 0 ? 'orange' : undefined}>{fmtBob(c.currentDebt)}</Text></Field>
+                {Number(c.currentDebt) < 0 ? (
+                  <Field label="Saldo a favor (anticipo)"><Text span fw={700} c="green">{fmtBob(-Number(c.currentDebt))}</Text></Field>
+                ) : (
+                  <Field label="Deuda actual"><Text span fw={700} c={Number(c.currentDebt) > 0 ? 'orange' : undefined}>{fmtBob(c.currentDebt)}</Text></Field>
+                )}
                 <Field label="Disponible">{fmtBob(c.creditAvailable)}</Field>
               </Stack>
             </Card>
@@ -172,6 +183,8 @@ export function CustomerDetailPage() {
                         <Table.Td>
                           {m.referenceType === 'sale' ? (
                             <Anchor component={Link} to={`/ventas/${m.referenceId}`}>{RECEIVABLE_LABELS[m.movementType]}</Anchor>
+                          ) : m.referenceType === 'collection' ? (
+                            <Anchor component={Link} to="/cobranza">{m.movementType === 'ANNUL' ? 'Anulación de cobro' : RECEIVABLE_LABELS[m.movementType]}</Anchor>
                           ) : (
                             RECEIVABLE_LABELS[m.movementType]
                           )}
@@ -189,6 +202,8 @@ export function CustomerDetailPage() {
               </Table.ScrollContainer>
             )}
           </Card>
+
+          <CollectionModal opened={collecting} onClose={() => setCollecting(false)} customer={c} />
 
           <Modal opened={editing} onClose={() => setEditing(false)} title="Rango y crédito">
             <Stack>

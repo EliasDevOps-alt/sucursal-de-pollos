@@ -2,6 +2,7 @@ import { Center, Loader } from '@mantine/core';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { AppLayout } from './components/AppLayout';
+import { CollectionsPage } from './pages/collections/CollectionsPage';
 import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
 import { CustomersPage } from './pages/customers/CustomersPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -53,6 +54,7 @@ export function App() {
         <Route path="ventas/:id" element={<SaleDetailPage />} />
         <Route path="preventas" element={<PresalesPage />} />
         <Route path="preventas/:id" element={<PresaleDetailPage />} />
+        <Route path="cobranza" element={<CollectionsPage />} />
         <Route path="clientes" element={<CustomersPage />} />
         <Route path="clientes/:id" element={<CustomerDetailPage />} />
         <Route path="inventario" element={<InventoryPage />} />
