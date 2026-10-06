@@ -1,0 +1,16 @@
+# DOMAIN=erp.midominio.com → HTTPS automático (Let's Encrypt).
+# DOMAIN=:80 → HTTP simple (pruebas locales o por IP, sin certificado).
+{$DOMAIN::80} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	handle {
+		root * /srv
+		# Aplicación de una sola página: las rutas del panel se resuelven en index.html.
+		try_files {path} /index.html
+		file_server
+	}
+}

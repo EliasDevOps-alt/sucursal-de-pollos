@@ -25,4 +25,4 @@ Fuera de la demo (fases siguientes): rutas, entregas con firma, GPS, cobranza, c
 | C | Clientes, kardex, stock, venta FEFO multi-lote, crédito y autorizaciones (API + panel web) | Completada |
 | D | Dashboard y reportes: rentabilidad, merma, cuentas por cobrar, alertas (API + panel web) | Completada |
 | E | App Flutter de preventa offline + sincronización idempotente + preventas en la web | Completada |
-| F | Datos realistas, despliegue y guion de demo | Pendiente |
+| F | Datos de demo realistas, configuración Docker con HTTPS, guía de despliegue y guion de presentación | Completada |

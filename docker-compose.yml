@@ -1,0 +1,53 @@
+# Despliegue completo: base de datos + API + panel web (con HTTPS automático vía Caddy).
+#   cp .env.production.example .env   (y completar)
+#   docker compose up -d --build
+#   docker compose exec backend npx prisma db seed     (solo la primera vez)
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: erp_pollos
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD en .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp -d erp_pollos"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://erp:${DB_PASSWORD}@db:5432/erp_pollos?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET en .env}
+      JWT_EXPIRES_IN: 12h
+      PORT: 3000
+      CORS_ORIGINS: ${PUBLIC_URL:-http://localhost}
+      DEFAULT_MARGIN_PERCENT: ${DEFAULT_MARGIN_PERCENT:-20}
+      REPORT_TZ: America/La_Paz
+      TZ: America/La_Paz
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      DOMAIN: ${DOMAIN:-:80}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
