@@ -2,6 +2,11 @@ import { Center, Loader } from '@mantine/core';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { AppLayout } from './components/AppLayout';
+import { AuditPage } from './pages/admin/AuditPage';
+import { CatalogsAdminPage } from './pages/admin/CatalogsAdminPage';
+import { RolesAdminPage } from './pages/admin/RolesAdminPage';
+import { SyncIssuesPage } from './pages/admin/SyncIssuesPage';
+import { UsersAdminPage } from './pages/admin/UsersAdminPage';
 import { CollectionsPage } from './pages/collections/CollectionsPage';
 import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
 import { CustomersPage } from './pages/customers/CustomersPage';
@@ -63,6 +68,11 @@ export function App() {
         <Route path="reportes" element={<ReportsPage />} />
         <Route path="productos" element={<ProductsPage />} />
         <Route path="proveedores" element={<SuppliersPage />} />
+        <Route path="admin/usuarios" element={<UsersAdminPage />} />
+        <Route path="admin/roles" element={<RolesAdminPage />} />
+        <Route path="admin/catalogos" element={<CatalogsAdminPage />} />
+        <Route path="admin/auditoria" element={<AuditPage />} />
+        <Route path="admin/sincronizacion" element={<SyncIssuesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

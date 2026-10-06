@@ -168,6 +168,11 @@ async function main() {
     sales, inventory_movements, inventory_balances, lot_prices, lots, reception_items, receptions, purchase_items, purchases,
     sync_operations, gps_positions, devices, customer_addresses, customers, audit_logs RESTART IDENTITY CASCADE`);
   await prisma.$executeRawUnsafe(`UPDATE document_sequences SET last_value = 0`);
+  // Usuarios y tipos de cliente creados al probar (no los del seed) se retiran; ya no tienen operaciones asociadas.
+  await prisma.$executeRawUnsafe(`DELETE FROM users WHERE username NOT IN ('admin', 'vcentral', 'vsucursal', 'preventista', 'contador')`);
+  await prisma.$executeRawUnsafe(`DELETE FROM customer_types WHERE name NOT IN ('Tienda', 'Mercado', 'Mayorista', 'Persona particular', 'Otro')`);
+  await prisma.$executeRawUnsafe(`UPDATE customer_types SET is_active = true`);
+  await prisma.$executeRawUnsafe(`UPDATE users SET is_active = true`);
 
   const admin = await login('admin', 'Admin123!');
   const seller = await login('vcentral', 'Demo123!');

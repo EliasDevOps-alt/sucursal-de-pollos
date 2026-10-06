@@ -470,3 +470,66 @@ export interface Collection {
   customer: { id: string; code: string; name: string; currentDebt: Dec };
   receivedBy: { id: string; fullName: string };
 }
+
+// ── Administración ─────────────────────────────────────────
+export interface UserRow {
+  id: string;
+  username: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  isActive: boolean;
+  createdAt: string;
+  role: { id: string; code: string; name: string };
+  branch: { id: string; code: string; name: string } | null;
+}
+
+export interface RoleRow {
+  id: string;
+  code: string;
+  name: string;
+  users: number;
+  permissions: string[];
+}
+
+export interface PermissionRow {
+  id: string;
+  code: string;
+  module: string;
+  description: string;
+}
+
+export interface AuditLogRow {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  oldData: unknown;
+  newData: unknown;
+  reason: string | null;
+  createdAt: string;
+  user: { id: string; fullName: string; username: string } | null;
+}
+
+export interface SyncIssue {
+  id: string;
+  deviceOperationId: string;
+  operationType: string;
+  entityType: string;
+  payload: Record<string, unknown>;
+  status: 'ERROR' | 'REVIEW';
+  errorMessage: string | null;
+  createdAtDevice: string;
+  receivedAtServer: string;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+  user: { id: string; fullName: string };
+  device: { deviceUuid: string; platform: string; appVersion: string | null };
+  resolvedBy: { fullName: string } | null;
+}
+
+export interface Branch {
+  id: string;
+  code: string;
+  name: string;
+}

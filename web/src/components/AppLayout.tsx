@@ -1,7 +1,12 @@
-import { AppShell, Avatar, Burger, Group, NavLink, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { AppShell, Avatar, Burger, Divider, Group, NavLink, ScrollArea, Stack, Text, Title, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconBuildingWarehouse,
+  IconCategory,
+  IconClipboardList,
+  IconRefreshAlert,
+  IconShieldLock,
+  IconUserCog,
   IconCash,
   IconDeviceMobile,
   IconChartBar,
@@ -29,10 +34,21 @@ const NAV = [
   { to: '/proveedores', label: 'Proveedores', icon: IconTruckDelivery, permission: 'catalog.view' },
 ];
 
+// Sección de administración del sistema.
+const ADMIN_NAV = [
+  { to: '/admin/usuarios', label: 'Usuarios', icon: IconUserCog, permission: 'users.view' },
+  { to: '/admin/roles', label: 'Roles y permisos', icon: IconShieldLock, permission: 'users.view' },
+  { to: '/admin/catalogos', label: 'Catálogos', icon: IconCategory, permission: 'catalog.manage' },
+  { to: '/admin/auditoria', label: 'Auditoría', icon: IconClipboardList, permission: 'audit.view' },
+  { to: '/admin/sincronizacion', label: 'Sincronización móvil', icon: IconRefreshAlert, permission: 'presales.manage' },
+];
+
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure();
   const { user, can, logout } = useAuth();
   const { pathname } = useLocation();
+
+  const adminItems = ADMIN_NAV.filter((n) => can(n.permission));
 
   // /lotes/:id se muestra bajo Inventario.
   const isActive = (to: string) =>
@@ -63,19 +79,33 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="xs">
-        <Stack gap={2} style={{ flex: 1 }}>
-          {NAV.filter((n) => !n.permission || can(n.permission)).map((n) => (
-            <NavLink
-              key={n.to}
-              component={RouterLink}
-              to={n.to}
-              label={n.label}
-              leftSection={<n.icon size={18} stroke={1.6} />}
-              active={isActive(n.to)}
-              onClick={close}
-            />
-          ))}
-        </Stack>
+        <AppShell.Section grow component={ScrollArea} type="scroll">
+          <Stack gap={2}>
+            {NAV.filter((n) => !n.permission || can(n.permission)).map((n) => (
+              <NavLink
+                key={n.to}
+                component={RouterLink}
+                to={n.to}
+                label={n.label}
+                leftSection={<n.icon size={18} stroke={1.6} />}
+                active={isActive(n.to)}
+                onClick={close}
+              />
+            ))}
+            {adminItems.length > 0 && <Divider my="xs" label="Administración" labelPosition="left" />}
+            {adminItems.map((n) => (
+              <NavLink
+                key={n.to}
+                component={RouterLink}
+                to={n.to}
+                label={n.label}
+                leftSection={<n.icon size={18} stroke={1.6} />}
+                active={pathname.startsWith(n.to)}
+                onClick={close}
+              />
+            ))}
+          </Stack>
+        </AppShell.Section>
         <UnstyledButton onClick={logout} p="xs">
           <Group gap="xs">
             <IconLogout size={18} stroke={1.6} />
