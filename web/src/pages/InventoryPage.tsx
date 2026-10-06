@@ -1,10 +1,11 @@
-import { Anchor, Badge, Card, Group, Select, SimpleGrid, Table, Tabs, Text } from '@mantine/core';
+import { Anchor, Card, Group, Select, SimpleGrid, Table, Tabs, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { StockRow, Warehouse } from '../api/types';
 import { PageHeader } from '../components/PageHeader';
+import { StatTile } from '../components/viz/StatTile';
 import { QueryState } from '../components/QueryState';
 import { fmtBob, fmtDate, fmtDateTime, fmtKg, fmtPerKg, MOVEMENT_LABELS } from '../lib/format';
 import { LotsPage } from './lots/LotsPage';
@@ -39,9 +40,9 @@ function StockTab({ warehouseId }: { warehouseId: string | null }) {
   return (
     <QueryState isLoading={isLoading} error={error}>
       <SimpleGrid cols={{ base: 1, sm: 3 }} mb="md">
-        <Card withBorder padding="sm"><Text size="xs" c="dimmed" fw={600}>STOCK TOTAL</Text><Text fw={700} size="lg">{fmtKg(kg.toFixed(3))}</Text></Card>
-        <Card withBorder padding="sm"><Text size="xs" c="dimmed" fw={600}>VALOR A COSTO REAL</Text><Text fw={700} size="lg">{fmtBob(value)}</Text></Card>
-        <Card withBorder padding="sm"><Text size="xs" c="dimmed" fw={600}>PRODUCTOS CON STOCK</Text><Text fw={700} size="lg">{data?.length ?? 0}</Text></Card>
+        <StatTile label="Stock total" value={fmtKg(kg.toFixed(3))} />
+        <StatTile label="Valor a costo real" value={fmtBob(value)} />
+        <StatTile label="Productos con stock" value={String(data?.length ?? 0)} />
       </SimpleGrid>
       <Card withBorder p={0}>
         <Table.ScrollContainer minWidth={640}>
@@ -143,7 +144,7 @@ export function InventoryPage() {
           onChange={setWarehouseId}
           data={(warehouses.data ?? []).map((w) => ({ value: w.id, label: w.name }))}
         />
-        <Badge variant="light" color="gray">El historial oficial es el kardex; el stock es su suma</Badge>
+        <Text size="sm" c="dimmed">El historial oficial es el kardex; el stock es su suma.</Text>
       </Group>
       <Tabs defaultValue="stock" keepMounted={false}>
         <Tabs.List mb="md">

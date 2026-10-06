@@ -3,6 +3,7 @@ import { useDisclosure } from '@mantine/hooks';
 import {
   IconBuildingWarehouse,
   IconCash,
+  IconChartBar,
   IconLayoutDashboard,
   IconLogout,
   IconPackage,
@@ -19,6 +20,7 @@ const NAV = [
   { to: '/clientes', label: 'Clientes', icon: IconUsers, permission: 'customers.view' },
   { to: '/compras', label: 'Compras', icon: IconShoppingCart, permission: 'purchases.view' },
   { to: '/inventario', label: 'Inventario', icon: IconBuildingWarehouse, permission: 'inventory.view' },
+  { to: '/reportes', label: 'Reportes', icon: IconChartBar, permission: 'reports.financial' },
   { to: '/productos', label: 'Productos', icon: IconPackage, permission: 'catalog.view' },
   { to: '/proveedores', label: 'Proveedores', icon: IconTruckDelivery, permission: 'catalog.view' },
 ];

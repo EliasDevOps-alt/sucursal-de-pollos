@@ -32,6 +32,7 @@ export interface Product {
   brand: string | null;
   categoryId: string;
   saleUnit: 'KG' | 'CANASTILLO' | 'UNIDAD';
+  minStockKg: Dec;
   isActive: boolean;
   category: Ref;
 }
@@ -333,4 +334,90 @@ export interface StockRow {
   value: Dec;
   lots: number;
   nextExpiry: string | null;
+}
+
+// ── Reportes ───────────────────────────────────────────────
+export interface DayPoint {
+  day: string;
+  revenue: Dec;
+  cost?: Dec;
+  margin?: Dec;
+  count: number;
+  kg: Dec;
+}
+
+export interface Alerts {
+  today: string;
+  expiringLots: { id: string; lotCode: string; product: string; warehouse: string; expiryDate: string; daysToExpiry: number; weightKg: Dec; costValue: Dec }[];
+  lowStock: { id: string; code: string; name: string; minStockKg: Dec; stockKg: Dec }[];
+}
+
+export interface Debtor {
+  id: string;
+  code: string;
+  name: string;
+  phone: string | null;
+  debt: Dec;
+  creditLimit: Dec;
+  usagePercentage: Dec;
+  oldestCharge: string | null;
+  daysOutstanding: number | null;
+}
+
+export interface Dashboard {
+  range: { from: string; to: string };
+  previousRange: { from: string; to: string };
+  kpis: {
+    revenue: Dec;
+    revenueDeltaPercentage: Dec | null;
+    salesCount: number;
+    averageTicket: Dec;
+    kgSold: Dec;
+    cost?: Dec;
+    margin?: Dec;
+    marginPercentage?: Dec;
+    marginDeltaPercentage?: Dec | null;
+    receivables: Dec;
+    debtors: number;
+    stockKg: Dec;
+    stockValue?: Dec;
+    purchasesTotal: Dec;
+    purchasesCount: number;
+  };
+  salesByDay: DayPoint[];
+  topProducts: { id: string; label: string; kg: Dec; revenue: Dec; margin?: Dec; marginPercentage?: Dec }[];
+  alerts: Alerts;
+  topDebtors: Debtor[];
+}
+
+export interface ProfitRow {
+  id: string | null;
+  label: string;
+  detail: string | null;
+  kg: Dec;
+  sales: number;
+  revenue: Dec;
+  cost: Dec;
+  margin: Dec;
+  marginPercentage: Dec;
+}
+
+export interface Profitability {
+  range: { from: string; to: string };
+  groupBy: 'product' | 'lot' | 'customer' | 'seller';
+  totals: { revenue: Dec; cost: Dec; margin: Dec; marginPercentage: Dec; kg: Dec };
+  rows: ProfitRow[];
+}
+
+export interface ShrinkageReport {
+  totals: { purchasedKg: Dec; shrinkageKg: Dec; shrinkagePercentage: Dec; loss: Dec };
+  bySupplier: { supplierId: string; supplier: string; lots: number; purchasedKg: Dec; shrinkageKg: Dec; shrinkagePercentage: Dec; loss: Dec }[];
+  lots: { id: string; lotCode: string; product: string; supplier: string; receivedAt: string; purchasedKg: Dec; netKg: Dec; shrinkageKg: Dec; shrinkagePercentage: Dec; loss: Dec; treatment: string }[];
+}
+
+export interface ReceivablesReport {
+  total: Dec;
+  debtors: number;
+  buckets: { label: string; amount: Dec }[];
+  customers: Debtor[];
 }

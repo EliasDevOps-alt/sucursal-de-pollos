@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Button, Card, Group, Modal, Select, Stack, Switch, Table, TextInput } from '@mantine/core';
+import { ActionIcon, Badge, Button, Card, Group, Modal, NumberInput, Select, Stack, Switch, Table, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconEdit, IconPlus } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import type { Category, Product } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/PageHeader';
 import { QueryState } from '../components/QueryState';
+import { fmtKg } from '../lib/format';
 import { notifyError, notifyOk } from '../lib/notify';
 
 interface FormValues {
@@ -16,10 +17,11 @@ interface FormValues {
   brand: string;
   categoryId: string;
   saleUnit: Product['saleUnit'];
+  minStockKg: number | '';
   isActive: boolean;
 }
 
-const empty: FormValues = { code: '', name: '', brand: '', categoryId: '', saleUnit: 'KG', isActive: true };
+const empty: FormValues = { code: '', name: '', brand: '', categoryId: '', saleUnit: 'KG', minStockKg: 0, isActive: true };
 
 const UNIT_OPTIONS = [
   { value: 'KG', label: 'Kilogramo' },
@@ -53,7 +55,7 @@ export function ProductsPage() {
 
   const save = useMutation({
     mutationFn: async (values: FormValues) => {
-      const body = { ...values, brand: values.brand || undefined };
+      const body = { ...values, brand: values.brand || undefined, minStockKg: Number(values.minStockKg || 0) };
       if (editing === 'new') {
         const { isActive: _ignored, ...create } = body;
         return api.post('/products', create);
@@ -72,7 +74,7 @@ export function ProductsPage() {
     form.setValues(
       p === 'new'
         ? empty
-        : { code: p.code, name: p.name, brand: p.brand ?? '', categoryId: p.categoryId, saleUnit: p.saleUnit, isActive: p.isActive },
+        : { code: p.code, name: p.name, brand: p.brand ?? '', categoryId: p.categoryId, saleUnit: p.saleUnit, minStockKg: Number(p.minStockKg), isActive: p.isActive },
     );
     setEditing(p);
   };
@@ -95,6 +97,7 @@ export function ProductsPage() {
                   <Table.Th>Marca</Table.Th>
                   <Table.Th>Categoría</Table.Th>
                   <Table.Th>Unidad</Table.Th>
+                  <Table.Th ta="right">Stock mínimo</Table.Th>
                   <Table.Th>Estado</Table.Th>
                   <Table.Th />
                 </Table.Tr>
@@ -107,6 +110,7 @@ export function ProductsPage() {
                     <Table.Td>{p.brand ?? '—'}</Table.Td>
                     <Table.Td>{p.category.name}</Table.Td>
                     <Table.Td>{UNIT_OPTIONS.find((u) => u.value === p.saleUnit)?.label}</Table.Td>
+                    <Table.Td ta="right">{Number(p.minStockKg) > 0 ? fmtKg(p.minStockKg) : '—'}</Table.Td>
                     <Table.Td>
                       <Badge variant="light" color={p.isActive ? 'green' : 'gray'}>{p.isActive ? 'Activo' : 'Inactivo'}</Badge>
                     </Table.Td>
@@ -142,6 +146,13 @@ export function ProductsPage() {
               />
               <Select label="Unidad de venta" data={UNIT_OPTIONS} allowDeselect={false} {...form.getInputProps('saleUnit')} />
             </Group>
+            <NumberInput
+              label="Stock mínimo (kg)"
+              description="Debajo de este saldo aparece la alerta de stock bajo (0 = sin alerta)"
+              min={0}
+              decimalScale={3}
+              {...form.getInputProps('minStockKg')}
+            />
             {editing !== 'new' && <Switch label="Activo" {...form.getInputProps('isActive', { type: 'checkbox' })} />}
             <Button type="submit" loading={save.isPending}>Guardar</Button>
           </Stack>

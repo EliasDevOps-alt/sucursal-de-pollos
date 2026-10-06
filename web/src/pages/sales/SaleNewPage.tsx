@@ -187,11 +187,11 @@ export function SaleNewPage() {
             </Card>
 
             <Card withBorder p={0}>
-              <Table.ScrollContainer minWidth={700}>
+              <Table.ScrollContainer minWidth={560}>
                 <Table verticalSpacing="sm">
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th w="38%">Producto</Table.Th>
+                      <Table.Th>Producto</Table.Th>
                       <Table.Th>Kg</Table.Th>
                       <Table.Th>Precio/kg</Table.Th>
                       <Table.Th>Lotes</Table.Th>
@@ -225,7 +225,7 @@ export function SaleNewPage() {
                             )}
                           </Table.Td>
                           <Table.Td>
-                            <NumberInput min={0} decimalScale={3} w={100} value={l.weightKg} onChange={(v) => updateLine(l.key, { weightKg: v as number | '', lots: undefined })} />
+                            <NumberInput min={0} decimalScale={3} w={90} value={l.weightKg} onChange={(v) => updateLine(l.key, { weightKg: v as number | '', lots: undefined })} />
                           </Table.Td>
                           <Table.Td>
                             <NumberInput

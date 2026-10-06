@@ -13,6 +13,7 @@ import { ProductsPage } from './pages/ProductsPage';
 import { PurchaseDetailPage } from './pages/purchases/PurchaseDetailPage';
 import { PurchaseNewPage } from './pages/purchases/PurchaseNewPage';
 import { PurchasesPage } from './pages/purchases/PurchasesPage';
+import { ReportsPage } from './pages/ReportsPage';
 import { SaleDetailPage } from './pages/sales/SaleDetailPage';
 import { SaleNewPage } from './pages/sales/SaleNewPage';
 import { SalesPage } from './pages/sales/SalesPage';
@@ -53,6 +54,7 @@ export function App() {
         <Route path="inventario" element={<InventoryPage />} />
         <Route path="lotes" element={<LotsPage />} />
         <Route path="lotes/:id" element={<LotDetailPage />} />
+        <Route path="reportes" element={<ReportsPage />} />
         <Route path="productos" element={<ProductsPage />} />
         <Route path="proveedores" element={<SuppliersPage />} />
       </Route>
