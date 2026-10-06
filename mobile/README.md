@@ -18,6 +18,9 @@ Los clientes y pedidos se crean con UUID generados en el teléfono, así un pedi
 flutter pub get
 flutter run                      # con un emulador o teléfono Android conectado
 flutter build apk --debug        # APK en build/app/outputs/flutter-apk/app-debug.apk
+
+# APK liviano para un teléfono real, con la IP de la PC ya configurada:
+flutter build apk --release --split-per-abi --dart-define=API_URL=http://IP-DE-LA-PC:3000/api
 ```
 
 En la pantalla de ingreso, **Servidor** permite configurar la API:

@@ -12,9 +12,11 @@ import '../core/models.dart';
 import '../core/sync_engine.dart';
 import '../core/workspace.dart';
 
-/// URL por defecto: el emulador de Android ve la PC como 10.0.2.2. En un teléfono real
-/// se configura la IP de la PC en la red local o el dominio del servidor en la nube.
-const defaultApiUrl = 'http://10.0.2.2:3000/api';
+/// URL por defecto del servidor. Se fija al compilar:
+///   flutter build apk --dart-define=API_URL=http://192.168.1.25:3000/api
+/// Sin ese parámetro apunta al emulador de Android (que ve la PC como 10.0.2.2).
+/// En la pantalla de ingreso, "Servidor" permite cambiarla.
+const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3000/api');
 const appVersion = '0.1.0';
 
 class AppState extends ChangeNotifier {
