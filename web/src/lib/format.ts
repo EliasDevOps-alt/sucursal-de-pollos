@@ -55,3 +55,23 @@ export function expiryLabel(days: number) {
   if (days === 0) return 'Vence hoy';
   return `${days} d`;
 }
+
+export const PAYMENT_STATUS: Record<string, { label: string; color: string }> = {
+  PAID: { label: 'Pagada', color: 'green' },
+  PARTIAL: { label: 'Pago parcial', color: 'yellow' },
+  CREDIT: { label: 'A crédito', color: 'orange' },
+  PENDING: { label: 'Pendiente', color: 'gray' },
+};
+
+export const SALE_STATUS: Record<string, { label: string; color: string }> = {
+  CONFIRMED: { label: 'Confirmada', color: 'blue' },
+  ANNULLED: { label: 'Anulada', color: 'gray' },
+  RETURNED: { label: 'Devuelta', color: 'grape' },
+};
+
+export const RECEIVABLE_LABELS: Record<string, string> = {
+  CHARGE: 'Venta a crédito',
+  PAYMENT: 'Pago',
+  ANNUL: 'Anulación de venta',
+  ADJUSTMENT: 'Ajuste',
+};

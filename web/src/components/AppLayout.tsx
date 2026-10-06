@@ -2,19 +2,23 @@ import { AppShell, Avatar, Burger, Group, NavLink, Stack, Text, Title, UnstyledB
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconBuildingWarehouse,
+  IconCash,
   IconLayoutDashboard,
   IconLogout,
   IconPackage,
   IconShoppingCart,
   IconTruckDelivery,
+  IconUsers,
 } from '@tabler/icons-react';
 import { NavLink as RouterLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
 const NAV = [
   { to: '/', label: 'Inicio', icon: IconLayoutDashboard, permission: null },
+  { to: '/ventas', label: 'Ventas', icon: IconCash, permission: 'sales.view' },
+  { to: '/clientes', label: 'Clientes', icon: IconUsers, permission: 'customers.view' },
   { to: '/compras', label: 'Compras', icon: IconShoppingCart, permission: 'purchases.view' },
-  { to: '/lotes', label: 'Lotes e inventario', icon: IconBuildingWarehouse, permission: 'lots.view' },
+  { to: '/inventario', label: 'Inventario', icon: IconBuildingWarehouse, permission: 'inventory.view' },
   { to: '/productos', label: 'Productos', icon: IconPackage, permission: 'catalog.view' },
   { to: '/proveedores', label: 'Proveedores', icon: IconTruckDelivery, permission: 'catalog.view' },
 ];
@@ -24,7 +28,9 @@ export function AppLayout() {
   const { user, can, logout } = useAuth();
   const { pathname } = useLocation();
 
-  const isActive = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to));
+  // /lotes/:id se muestra bajo Inventario.
+  const isActive = (to: string) =>
+    to === '/' ? pathname === '/' : pathname.startsWith(to) || (to === '/inventario' && pathname.startsWith('/lotes'));
 
   return (
     <AppShell

@@ -52,7 +52,7 @@ export function DashboardPage() {
           <Card withBorder>
             <Group justify="space-between" mb="sm">
               <Text fw={600}>Lotes próximos a vencer</Text>
-              <Anchor component={Link} to="/lotes" size="sm">Ver todos</Anchor>
+              <Anchor component={Link} to="/inventario" size="sm">Ver inventario</Anchor>
             </Group>
             {expiring.length === 0 ? (
               <Text c="dimmed" size="sm">No hay lotes por vencer en los próximos 3 días.</Text>

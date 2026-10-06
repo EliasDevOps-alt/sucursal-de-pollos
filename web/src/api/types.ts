@@ -167,3 +167,170 @@ export interface LotDetail {
   inventoryMovements: KardexRow[];
   prices: LotPrice[];
 }
+
+// ── Clientes ───────────────────────────────────────────────
+export interface CustomerRank {
+  id: string;
+  code: string;
+  name: string;
+  discountPercentage: Dec;
+  creditLimit: Dec;
+}
+
+export interface CustomerAddress {
+  id: string;
+  label: string;
+  address: string;
+  latitude: Dec | null;
+  longitude: Dec | null;
+  isPrimary: boolean;
+  source: string;
+}
+
+export interface Customer {
+  id: string;
+  code: string;
+  name: string;
+  documentId: string | null;
+  phone: string | null;
+  customerTypeId: string;
+  rankId: string | null;
+  creditEnabled: boolean;
+  creditLimit: Dec;
+  currentDebt: Dec;
+  creditAvailable: Dec;
+  status: 'ACTIVE' | 'INACTIVE';
+  customerType: { id: string; name: string };
+  rank: (Pick<CustomerRank, 'id' | 'code' | 'name' | 'discountPercentage'>) | null;
+  addresses: CustomerAddress[];
+}
+
+export interface ReceivableMovement {
+  id: string;
+  movementType: 'CHARGE' | 'PAYMENT' | 'ANNUL' | 'ADJUSTMENT';
+  amount: Dec;
+  balanceAfter: Dec;
+  referenceType: string;
+  referenceId: string;
+  reason: string | null;
+  createdAt: string;
+  createdBy: { fullName: string };
+}
+
+export interface CustomerDetail extends Customer {
+  sales: { id: string; saleNumber: string; createdAt: string; totalAmount: Dec; paymentStatus: PaymentStatus; status: SaleStatus }[];
+  receivableMovements: ReceivableMovement[];
+}
+
+// ── Ventas ─────────────────────────────────────────────────
+export type PaymentStatus = 'PAID' | 'PARTIAL' | 'CREDIT' | 'PENDING';
+export type SaleStatus = 'CONFIRMED' | 'ANNULLED' | 'RETURNED';
+
+export interface AvailableLot {
+  lotId: string;
+  lotCode: string;
+  expiryDate: string;
+  availableKg: Dec;
+  costPerKg: Dec;
+  pricePerKg: Dec | null;
+  fefoOrder: number;
+}
+
+export interface SaleIssue {
+  type: 'LOT_OVERRIDE' | 'PRICE_CHANGE' | 'CREDIT_LIMIT';
+  lineIndex?: number;
+  message: string;
+  permission: string;
+  reason?: string;
+  approver?: { id: string; fullName: string };
+  needsReason: boolean;
+}
+
+export interface SaleQuote {
+  saleMode: 'CENTRAL' | 'BRANCH' | 'PRESALE';
+  customer: { id: string; name: string; rank: string | null; creditEnabled: boolean; creditAvailable: Dec } | null;
+  discountPercentage: Dec;
+  lines: {
+    productId: string;
+    productName: string;
+    weightKg: Dec;
+    originalUnitPrice: Dec;
+    unitPrice: Dec;
+    gross: Dec;
+    discount: Dec;
+    subtotal: Dec;
+    cost: Dec;
+    allocations: { lotId: string; lotCode: string; expiryDate: string; weightKg: Dec; costPerKg: Dec; price: Dec; forced: boolean }[];
+  }[];
+  subtotal: Dec;
+  discount: Dec;
+  total: Dec;
+  cost: Dec;
+  paid: Dec;
+  credit: Dec;
+  paymentStatus: PaymentStatus;
+  issues: SaleIssue[];
+  canConfirm: boolean;
+}
+
+export interface SaleListItem {
+  id: string;
+  saleNumber: string;
+  createdAt: string;
+  saleMode: string;
+  totalAmount: Dec;
+  paidAmount: Dec;
+  creditAmount: Dec;
+  paymentStatus: PaymentStatus;
+  status: SaleStatus;
+  customer: { id: string; code: string; name: string } | null;
+  warehouse: Ref;
+  seller: { id: string; fullName: string };
+  _count: { items: number };
+}
+
+export interface SaleDetail extends Omit<SaleListItem, '_count'> {
+  subtotal: Dec;
+  discountAmount: Dec;
+  notes: string | null;
+  annulledAt: string | null;
+  annulReason: string | null;
+  annulledBy: { fullName: string } | null;
+  creditAuthorizedBy: { fullName: string } | null;
+  creditExceptionReason: string | null;
+  branch: Ref | null;
+  payments: { id: string; amount: Dec; paymentMethod: string; paymentDate: string; receivedBy: { fullName: string } }[];
+  items: {
+    id: string;
+    product: Ref;
+    requestedWeightKg: Dec;
+    originalUnitPrice: Dec;
+    unitPrice: Dec;
+    discountAmount: Dec;
+    subtotal: Dec;
+    priceChangeReason: string | null;
+    priceAuthorizedBy: { fullName: string } | null;
+    cost: Dec;
+    margin: Dec;
+    allocations: {
+      id: string;
+      weightKg: Dec;
+      costPerKg: Dec;
+      salePricePerKg: Dec;
+      forcedLot: boolean;
+      forceReason: string | null;
+      authorizedBy: { fullName: string } | null;
+      lot: { id: string; lotCode: string; expiryDate: string };
+    }[];
+  }[];
+  profitability: { revenue: Dec; cost: Dec; margin: Dec; marginPercentage: Dec };
+}
+
+// ── Inventario ─────────────────────────────────────────────
+export interface StockRow {
+  product: { id: string; code: string; name: string; category: { name: string } };
+  weightKg: Dec;
+  value: Dec;
+  lots: number;
+  nextExpiry: string | null;
+}

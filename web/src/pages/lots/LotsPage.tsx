@@ -8,7 +8,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { expiryColor, expiryLabel, fmtDate, fmtKg, fmtPerKg } from '../../lib/format';
 
-export function LotsPage() {
+export function LotsPage({ embedded = false }: { embedded?: boolean }) {
   const [productId, setProductId] = useState<string | null>(null);
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [onlyAvailable, setOnlyAvailable] = useState(true);
@@ -36,7 +36,7 @@ export function LotsPage() {
 
   return (
     <>
-      <PageHeader title="Lotes e inventario" subtitle="Ordenados por vencimiento: el que vence primero sale primero (FEFO)" />
+      {!embedded && <PageHeader title="Lotes" subtitle="Ordenados por vencimiento: el que vence primero sale primero (FEFO)" />}
       <Group mb="sm" align="flex-end" wrap="wrap">
         <Select
           label="Producto"

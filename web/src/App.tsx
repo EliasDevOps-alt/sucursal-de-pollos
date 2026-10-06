@@ -2,7 +2,10 @@ import { Center, Loader } from '@mantine/core';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { AppLayout } from './components/AppLayout';
+import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
+import { CustomersPage } from './pages/customers/CustomersPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { InventoryPage } from './pages/InventoryPage';
 import { LoginPage } from './pages/LoginPage';
 import { LotDetailPage } from './pages/lots/LotDetailPage';
 import { LotsPage } from './pages/lots/LotsPage';
@@ -10,6 +13,9 @@ import { ProductsPage } from './pages/ProductsPage';
 import { PurchaseDetailPage } from './pages/purchases/PurchaseDetailPage';
 import { PurchaseNewPage } from './pages/purchases/PurchaseNewPage';
 import { PurchasesPage } from './pages/purchases/PurchasesPage';
+import { SaleDetailPage } from './pages/sales/SaleDetailPage';
+import { SaleNewPage } from './pages/sales/SaleNewPage';
+import { SalesPage } from './pages/sales/SalesPage';
 import { SuppliersPage } from './pages/SuppliersPage';
 
 export function App() {
@@ -39,6 +45,12 @@ export function App() {
         <Route path="compras" element={<PurchasesPage />} />
         <Route path="compras/nueva" element={<PurchaseNewPage />} />
         <Route path="compras/:id" element={<PurchaseDetailPage />} />
+        <Route path="ventas" element={<SalesPage />} />
+        <Route path="ventas/nueva" element={<SaleNewPage />} />
+        <Route path="ventas/:id" element={<SaleDetailPage />} />
+        <Route path="clientes" element={<CustomersPage />} />
+        <Route path="clientes/:id" element={<CustomerDetailPage />} />
+        <Route path="inventario" element={<InventoryPage />} />
         <Route path="lotes" element={<LotsPage />} />
         <Route path="lotes/:id" element={<LotDetailPage />} />
         <Route path="productos" element={<ProductsPage />} />

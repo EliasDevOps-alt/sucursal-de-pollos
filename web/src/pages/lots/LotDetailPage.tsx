@@ -63,8 +63,8 @@ export function LotDetailPage() {
     <QueryState isLoading={isLoading} error={error}>
       {lot && (
         <Stack>
-          <Anchor component={Link} to="/lotes" size="sm">
-            <Group gap={4}><IconArrowLeft size={14} /> Lotes</Group>
+          <Anchor component={Link} to="/inventario" size="sm">
+            <Group gap={4}><IconArrowLeft size={14} /> Inventario</Group>
           </Anchor>
           <PageHeader
             title={`Lote ${lot.lotCode}`}
