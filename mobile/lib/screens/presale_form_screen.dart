@@ -9,16 +9,28 @@ import 'customer_form_screen.dart';
 import 'format.dart';
 
 class _Line {
-  _Line(this.product) : kg = TextEditingController(), units = TextEditingController();
+  _Line(this.product, {this.quotedPrice, double? weight, int? units})
+      : kg = TextEditingController(text: weight == null ? '' : _num(weight)),
+        units = TextEditingController(text: units?.toString() ?? '');
   final Product product;
+  /// Precio cotizado al tomar el pedido; al editar se conserva para no cambiar la cotización sin aviso.
+  final double? quotedPrice;
   final TextEditingController kg;
   final TextEditingController units;
   double get weight => double.tryParse(kg.text.replaceAll(',', '.')) ?? 0;
-  double get price => product.referencePrice ?? 0;
+  double get price => quotedPrice ?? product.referencePrice ?? 0;
+
+  static String _num(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString().replaceAll('.', ',');
 }
 
 class PresaleFormScreen extends StatefulWidget {
-  const PresaleFormScreen({super.key});
+  const PresaleFormScreen({super.key, this.initialCustomer, this.editing});
+
+  /// Cliente ya elegido (por ejemplo, desde su ficha).
+  final Customer? initialCustomer;
+
+  /// Pedido a editar; si es null, se crea uno nuevo.
+  final Presale? editing;
 
   @override
   State<PresaleFormScreen> createState() => _PresaleFormScreenState();
@@ -33,6 +45,30 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
   bool _saving = false;
 
   double get _total => _lines.fold(0, (s, l) => s + l.weight * l.price);
+
+  bool get _isEdit => widget.editing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = context.read<AppState>();
+    final e = widget.editing;
+    if (e != null) {
+      _customer = s.customers.where((c) => c.id == e.customerId).firstOrNull ??
+          Customer(id: e.customerId, name: e.customerName, customerTypeId: '');
+      _address = _customer!.addresses.where((a) => a.id == e.addressId).firstOrNull;
+      if (e.scheduledDeliveryDate != null) _delivery = DateTime.parse(e.scheduledDeliveryDate!);
+      _notes.text = e.notes ?? '';
+      for (final i in e.items) {
+        final product = s.products.where((p) => p.id == i.productId).firstOrNull ??
+            Product(id: i.productId, code: '', name: i.productName, category: '', referencePrice: i.unitPrice, availableKg: 0);
+        _lines.add(_Line(product, quotedPrice: i.unitPrice, weight: i.weightKg, units: i.quantity));
+      }
+    } else if (widget.initialCustomer != null) {
+      _customer = widget.initialCustomer;
+      _address = widget.initialCustomer!.primaryAddress;
+    }
+  }
 
   Future<void> _pickCustomer() async {
     final picked = await showModalBottomSheet<Customer>(context: context, isScrollControlled: true, builder: (_) => const _CustomerPicker());
@@ -57,14 +93,23 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
     }
     setState(() => _saving = true);
     final s = context.read<AppState>();
+    final items = valid
+        .map((l) => PresaleItem(productId: l.product.id, productName: l.product.name, weightKg: l.weight, unitPrice: l.price, quantity: int.tryParse(l.units.text)))
+        .toList();
+    if (_isEdit) {
+      await s.updatePresale(widget.editing!,
+          items: items, address: _address, scheduledDeliveryDate: DateFormat('yyyy-MM-dd').format(_delivery), notes: _notes.text);
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pedido actualizado')));
+      return;
+    }
     // El GPS no bloquea: si no hay señal en unos segundos, el pedido se guarda sin ubicación.
     final location = await s.location.current(timeout: const Duration(seconds: 8));
     await s.createPresale(
       customer: _customer!,
       address: _address,
-      items: valid
-          .map((l) => PresaleItem(productId: l.product.id, productName: l.product.name, weightKg: l.weight, unitPrice: l.price, quantity: int.tryParse(l.units.text)))
-          .toList(),
+      items: items,
       scheduledDeliveryDate: DateFormat('yyyy-MM-dd').format(_delivery),
       notes: _notes.text,
       location: location,
@@ -80,7 +125,7 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Nuevo pedido')),
+      appBar: AppBar(title: Text(_isEdit ? 'Editar pedido ${widget.editing!.number ?? ''}' : 'Nuevo pedido')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -94,8 +139,8 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
                       if (_customer!.rank != null) 'Rango ${_customer!.rank} (${_customer!.discountPercentage.toStringAsFixed(0)} % desc.)',
                       _customer!.creditEnabled ? 'Crédito disp. ${fmtBob(_customer!.creditAvailable)}' : 'Sin crédito',
                     ].join(' · ')),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _pickCustomer,
+              trailing: _isEdit ? null : const Icon(Icons.chevron_right),
+              onTap: _isEdit ? null : _pickCustomer,
             ),
           ),
           if (_customer != null && _customer!.addresses.length > 1)
@@ -186,7 +231,7 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
             onPressed: _saving ? null : _save,
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
             icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save),
-            label: Text(_saving ? 'Guardando (obteniendo GPS)…' : 'Guardar pedido'),
+            label: Text(_saving ? (_isEdit ? 'Guardando…' : 'Guardando (obteniendo GPS)…') : (_isEdit ? 'Guardar cambios' : 'Guardar pedido')),
           ),
         ],
       ),

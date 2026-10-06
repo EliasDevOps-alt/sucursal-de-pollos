@@ -203,6 +203,26 @@ class AppState extends ChangeNotifier {
     return p;
   }
 
+  Future<Presale> updatePresale(Presale p, {required List<PresaleItem> items, Address? address, String? scheduledDeliveryDate, String? notes}) async {
+    final edited = await workspace.updatePresale(p, items: items, address: address, scheduledDeliveryDate: scheduledDeliveryDate, notes: notes);
+    await reload();
+    unawaited(sync());
+    return edited;
+  }
+
+  Future<Customer> addAddress(Customer c, {required String label, required String address, GeoPoint? location}) async {
+    final updated = await workspace.addAddress(c, label: label, address: address, location: location);
+    await reload();
+    unawaited(sync());
+    return updated;
+  }
+
+  Future<void> recordVisit(Customer c, {required String outcome, String? notes, GeoPoint? location}) async {
+    await workspace.recordVisit(customer: c, outcome: outcome, notes: notes, location: location);
+    await reload();
+    unawaited(sync());
+  }
+
   Future<void> cancelPresale(Presale p, String reason) async {
     await workspace.cancelPresale(p, reason);
     await reload();

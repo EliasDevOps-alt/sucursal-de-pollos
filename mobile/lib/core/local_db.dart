@@ -133,13 +133,17 @@ class LocalDb {
 
   Future<void> removeOp(String id) => _db.delete('outbox', where: 'id = ?', whereArgs: [id]);
 
+  /// Corrige el contenido de una operación que todavía no salió del teléfono (conserva su id y su orden).
+  Future<void> updateOpPayload(String id, Map<String, dynamic> payload) =>
+      _db.update('outbox', {'payload': jsonEncode(payload)}, where: 'id = ?', whereArgs: [id]);
+
   Future<void> markOp(String id, {required String state, String? error}) => _db.rawUpdate(
         'UPDATE outbox SET state = ?, error = ?, attempts = attempts + 1 WHERE id = ?',
         [state, error, id],
       );
 
   Future<int> pendingCount() async =>
-      Sqflite.firstIntValue(await _db.rawQuery("SELECT COUNT(*) FROM outbox WHERE type <> 'GPS_POSITION'")) ?? 0;
+      Sqflite.firstIntValue(await _db.rawQuery("SELECT COUNT(*) FROM outbox WHERE type NOT IN ('GPS_POSITION', 'VISIT_CREATE')")) ?? 0;
 
   /// Borra todo (al cerrar sesión, solo si no quedan operaciones sin enviar).
   Future<void> clearAll() async {

@@ -128,6 +128,22 @@ class Customer {
         'pendingSync': pendingSync,
       };
 
+  Customer withAddress(Address a) => Customer(
+        id: id,
+        code: code,
+        name: name,
+        customerTypeId: customerTypeId,
+        phone: phone,
+        documentId: documentId,
+        rank: rank,
+        discountPercentage: discountPercentage,
+        creditEnabled: creditEnabled,
+        creditAvailable: creditAvailable,
+        currentDebt: currentDebt,
+        addresses: [...addresses, a],
+        pendingSync: pendingSync,
+      );
+
   Customer copyWith({String? code, bool? pendingSync}) => Customer(
         id: id,
         code: code ?? this.code,
@@ -183,6 +199,7 @@ class Presale {
     this.total,
     this.scheduledDeliveryDate,
     this.notes,
+    this.addressId,
     this.saleNumber,
     this.cancelReason,
     this.syncState = SyncState.pending,
@@ -200,6 +217,7 @@ class Presale {
   final double? total;
   final String? scheduledDeliveryDate;
   final String? notes;
+  final String? addressId;
   final String? saleNumber;
   final String? cancelReason;
   final SyncState syncState;
@@ -207,6 +225,25 @@ class Presale {
 
   double get quotedTotal => total ?? items.fold(0, (s, i) => s + i.subtotal);
   bool get canCancel => status == 'LOCAL' || status == 'PENDING' || status == 'CONFIRMED';
+
+  /// Se puede editar mientras no fue atendido, asignado ni cancelado.
+  bool get canEdit => canCancel;
+
+  /// Copia con los productos y datos editados (los totales se recalculan desde los ítems).
+  Presale withEdits({required List<PresaleItem> items, String? addressId, String? scheduledDeliveryDate, String? notes}) => Presale(
+        id: id,
+        number: number,
+        status: status,
+        customerId: customerId,
+        customerName: customerName,
+        items: items,
+        createdAt: createdAt,
+        scheduledDeliveryDate: scheduledDeliveryDate,
+        notes: notes,
+        addressId: addressId,
+        saleNumber: saleNumber,
+        syncState: SyncState.pending,
+      );
 
   factory Presale.fromJson(Map<String, dynamic> j) => Presale(
         id: j['id'] as String,
@@ -219,6 +256,7 @@ class Presale {
         total: toDoubleOrNull(j['total'] ?? j['totalAmount']),
         scheduledDeliveryDate: (j['scheduledDeliveryDate'] as String?)?.substring(0, 10),
         notes: j['notes'] as String?,
+        addressId: j['addressId'] as String?,
         saleNumber: j['saleNumber'] as String?,
         cancelReason: j['cancelReason'] as String?,
         syncState: SyncState.values.firstWhere((s) => s.name == j['syncState'], orElse: () => SyncState.synced),
@@ -236,6 +274,7 @@ class Presale {
         'total': total,
         'scheduledDeliveryDate': scheduledDeliveryDate,
         'notes': notes,
+        'addressId': addressId,
         'saleNumber': saleNumber,
         'cancelReason': cancelReason,
         'syncState': syncState.name,
@@ -253,6 +292,7 @@ class Presale {
         total: total,
         scheduledDeliveryDate: scheduledDeliveryDate,
         notes: notes,
+        addressId: addressId,
         saleNumber: saleNumber,
         cancelReason: cancelReason ?? this.cancelReason,
         syncState: syncState ?? this.syncState,
@@ -265,7 +305,7 @@ class OutboxOp {
   OutboxOp({required this.id, required this.type, required this.payload, required this.createdAt, this.state = 'pending', this.error, this.attempts = 0});
 
   final String id;
-  final String type; // CUSTOMER_CREATE, PRESALE_CREATE, PRESALE_CANCEL, GPS_POSITION
+  final String type; // CUSTOMER_CREATE, CUSTOMER_ADDRESS_ADD, PRESALE_CREATE, PRESALE_UPDATE, PRESALE_CANCEL, VISIT_CREATE, GPS_POSITION
   final Map<String, dynamic> payload;
   final DateTime createdAt;
   final String state; // pending | review | error
@@ -283,6 +323,9 @@ class OutboxOp {
         'CUSTOMER_CREATE' => 'Alta de cliente: ${payload['name'] ?? ''}',
         'PRESALE_CREATE' => 'Pedido nuevo',
         'PRESALE_CANCEL' => 'Cancelación de pedido',
+        'PRESALE_UPDATE' => 'Edición de pedido',
+        'CUSTOMER_ADDRESS_ADD' => 'Dirección adicional: ${payload['label'] ?? ''}',
+        'VISIT_CREATE' => 'Visita',
         'GPS_POSITION' => 'Posición GPS',
         _ => type,
       };

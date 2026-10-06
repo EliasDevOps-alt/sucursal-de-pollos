@@ -101,7 +101,84 @@ class Workspace {
       },
     ));
     if (location != null) await recordPosition(location, 'PRESALE', referenceId: presale.id);
+    // Tomar un pedido es también una visita con resultado "pedido".
+    await recordVisit(customer: customer, outcome: 'ORDER', presaleId: presale.id, location: location);
     return presale;
+  }
+
+  /// Edita un pedido. Si todavía no salió del teléfono se corrige la operación en la cola (no se crea otra);
+  /// si ya se envió, se encola la edición y el servidor decide (la rechaza si ya fue atendido).
+  Future<Presale> updatePresale(
+    Presale presale, {
+    required List<PresaleItem> items,
+    Address? address,
+    String? scheduledDeliveryDate,
+    String? notes,
+  }) async {
+    if (items.isEmpty) throw ArgumentError('El pedido no tiene productos');
+    final edited = presale.withEdits(items: items, addressId: address?.id, scheduledDeliveryDate: scheduledDeliveryDate, notes: _blankToNull(notes));
+    final itemsJson = items
+        .map((i) => {'productId': i.productId, 'weightKg': i.weightKg, if (i.quantity != null) 'quantity': i.quantity, 'unitPrice': i.unitPrice})
+        .toList();
+    final pendingCreate = (await db.outbox()).where((o) => o.type == 'PRESALE_CREATE' && o.payload['id'] == presale.id).firstOrNull;
+    if (pendingCreate != null) {
+      await db.updateOpPayload(pendingCreate.id, {
+        ...pendingCreate.payload,
+        'items': itemsJson,
+        'addressId': address?.id,
+        'scheduledDeliveryDate': scheduledDeliveryDate,
+        'notes': edited.notes,
+      }..removeWhere((_, v) => v == null));
+    } else {
+      await db.enqueue(OutboxOp(
+        id: _uuid.v4(),
+        type: 'PRESALE_UPDATE',
+        createdAt: DateTime.now(),
+        payload: {
+          'presaleId': presale.id,
+          'items': itemsJson,
+          if (address != null) 'addressId': address.id,
+          if (scheduledDeliveryDate != null) 'scheduledDeliveryDate': scheduledDeliveryDate,
+          if (edited.notes != null) 'notes': edited.notes,
+        },
+      ));
+    }
+    await db.savePresale(edited);
+    return edited;
+  }
+
+  /// Dirección adicional del cliente (la principal no cambia sin autorización de Administración).
+  Future<Customer> addAddress(Customer customer, {required String label, required String address, GeoPoint? location}) async {
+    final a = Address(id: _uuid.v4(), label: label.trim(), address: address.trim(), latitude: location?.latitude, longitude: location?.longitude);
+    await db.enqueue(OutboxOp(
+      id: _uuid.v4(),
+      type: 'CUSTOMER_ADDRESS_ADD',
+      createdAt: DateTime.now(),
+      payload: {'customerId': customer.id, ...(a.toJson()..remove('isPrimary')..removeWhere((_, v) => v == null))},
+    ));
+    final updated = customer.withAddress(a);
+    await db.saveCustomer(updated);
+    return updated;
+  }
+
+  /// Registra la visita a un cliente, con o sin pedido.
+  Future<void> recordVisit({required Customer customer, required String outcome, String? notes, String? presaleId, GeoPoint? location}) async {
+    final id = _uuid.v4();
+    await db.enqueue(OutboxOp(
+      id: _uuid.v4(),
+      type: 'VISIT_CREATE',
+      createdAt: DateTime.now(),
+      payload: {
+        'id': id,
+        'customerId': customer.id,
+        'outcome': outcome,
+        if (_blankToNull(notes) != null) 'notes': notes!.trim(),
+        if (presaleId != null) 'presaleId': presaleId,
+        if (location != null) 'latitude': location.latitude,
+        if (location != null) 'longitude': location.longitude,
+      },
+    ));
+    if (location != null && presaleId == null) await recordPosition(location, 'VISIT', referenceId: id);
   }
 
   /// Cancela un pedido. Si nunca llegó al servidor, se retira de la cola y desaparece;

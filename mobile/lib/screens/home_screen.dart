@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/models.dart';
 import '../state/app_state.dart';
+import 'customer_detail_screen.dart';
 import 'customer_form_screen.dart';
 import 'format.dart';
 import 'presale_detail_screen.dart';
@@ -123,7 +124,7 @@ class PresalesTab extends StatelessWidget {
     final s = context.watch<AppState>();
     final waiting = {
       for (final o in s.outbox)
-        if (o.type == 'PRESALE_CREATE') o.payload['id'] as String else if (o.type == 'PRESALE_CANCEL') o.payload['presaleId'] as String,
+        if (o.type == 'PRESALE_CREATE') o.payload['id'] as String else if (o.type == 'PRESALE_CANCEL' || o.type == 'PRESALE_UPDATE') o.payload['presaleId'] as String,
     };
     if (s.presales.isEmpty) {
       return RefreshIndicator(
@@ -205,6 +206,7 @@ class _CustomersTabState extends State<CustomersTab> {
                 final c = list[i];
                 final addr = c.primaryAddress;
                 return ListTile(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDetailScreen(customerId: c.id))),
                   leading: CircleAvatar(child: Text(c.name.characters.first.toUpperCase())),
                   title: Text(c.name),
                   subtitle: Text([c.code ?? 'Nuevo (sin enviar)', if (addr != null) addr.address, if (c.rank != null) 'Rango ${c.rank}'].join(' · '),

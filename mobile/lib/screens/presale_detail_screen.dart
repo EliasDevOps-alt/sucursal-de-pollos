@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/models.dart';
 import '../state/app_state.dart';
 import 'format.dart';
+import 'presale_form_screen.dart';
 
 class PresaleDetailScreen extends StatelessWidget {
   const PresaleDetailScreen({super.key, required this.presaleId});
@@ -35,7 +36,10 @@ class PresaleDetailScreen extends StatelessWidget {
     if (p == null) {
       return Scaffold(appBar: AppBar(), body: const Center(child: Text('El pedido ya no existe en el teléfono.')));
     }
-    final waiting = s.outbox.any((o) => (o.type == 'PRESALE_CREATE' && o.payload['id'] == p.id) || (o.type == 'PRESALE_CANCEL' && o.payload['presaleId'] == p.id));
+    final waiting = s.outbox.any((o) =>
+        (o.type == 'PRESALE_CREATE' && o.payload['id'] == p.id) ||
+        ((o.type == 'PRESALE_CANCEL' || o.type == 'PRESALE_UPDATE') && o.payload['presaleId'] == p.id));
+    final cancelPending = s.outbox.any((o) => o.type == 'PRESALE_CANCEL' && o.payload['presaleId'] == p.id);
     final badge = presaleBadge(context, p.status, p.syncState == SyncState.error, waiting);
 
     return Scaffold(
@@ -73,6 +77,15 @@ class PresaleDetailScreen extends StatelessWidget {
           const Divider(),
           Row(children: [const Text('Total cotizado'), const Spacer(), Text(fmtBob(p.quotedTotal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))]),
           const SizedBox(height: 24),
+          if (p.canEdit && !cancelPending)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FilledButton.tonalIcon(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PresaleFormScreen(editing: p))),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Editar pedido'),
+              ),
+            ),
           if (p.canCancel && !waiting)
             OutlinedButton.icon(
               onPressed: () => _cancel(context, p),

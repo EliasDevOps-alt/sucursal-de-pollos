@@ -73,13 +73,16 @@ class SyncEngine {
       case 'PRESALE_CANCEL':
         final p = await db.presale(op.payload['presaleId'] as String);
         if (p != null) await db.savePresale(p.copyWith(status: 'CANCELLED', syncState: SyncState.synced, clearError: true));
+      case 'PRESALE_UPDATE':
+        final p = await db.presale(op.payload['presaleId'] as String);
+        if (p != null) await db.savePresale(p.copyWith(syncState: SyncState.synced, clearError: true));
     }
   }
 
   Future<void> _applyFailure(OutboxOp op, String error) async {
     final presaleId = switch (op.type) {
       'PRESALE_CREATE' => op.payload['id'] as String?,
-      'PRESALE_CANCEL' => op.payload['presaleId'] as String?,
+      'PRESALE_CANCEL' || 'PRESALE_UPDATE' => op.payload['presaleId'] as String?,
       _ => null,
     };
     if (presaleId == null) return;
@@ -100,7 +103,7 @@ class SyncEngine {
     final pendingOps = await db.outbox();
     final waiting = <String>{
       for (final o in pendingOps)
-        if (o.type == 'PRESALE_CREATE') o.payload['id'] as String else if (o.type == 'PRESALE_CANCEL') o.payload['presaleId'] as String,
+        if (o.type == 'PRESALE_CREATE') o.payload['id'] as String else if (o.type == 'PRESALE_CANCEL' || o.type == 'PRESALE_UPDATE') o.payload['presaleId'] as String,
     };
     for (final raw in (data['presales'] as List)) {
       final j = Map<String, dynamic>.from(raw as Map);
@@ -108,7 +111,7 @@ class SyncEngine {
       final local = await db.presale(j['id'] as String);
       await db.savePresale(Presale.fromJson({
         ...j,
-        'notes': local?.notes,
+        'notes': j['notes'] ?? local?.notes,
         'syncState': SyncState.synced.name,
       }));
     }

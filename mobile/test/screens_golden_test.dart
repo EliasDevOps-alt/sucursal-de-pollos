@@ -10,6 +10,7 @@ import 'package:erp_preventa/core/local_db.dart';
 import 'package:erp_preventa/core/location_service.dart';
 import 'package:erp_preventa/core/models.dart';
 import 'package:erp_preventa/core/workspace.dart';
+import 'package:erp_preventa/screens/customer_detail_screen.dart';
 import 'package:erp_preventa/screens/customer_form_screen.dart';
 import 'package:erp_preventa/screens/home_screen.dart';
 import 'package:erp_preventa/screens/presale_detail_screen.dart';
@@ -132,5 +133,7 @@ void main() {
         await t.enterText(find.widgetWithText(TextField, 'Kg'), '80');
         await t.pumpAndSettle();
       }));
+  testWidgets('ficha de cliente', (t) => shot(t, 'ficha_cliente', (_) => const CustomerDetailScreen(customerId: 'c1')));
+  testWidgets('editar pedido', (t) => shot(t, 'editar_pedido', (s) => PresaleFormScreen(editing: s.presales.firstWhere((p) => p.id == 'x2'))));
   testWidgets('nuevo cliente', (t) => shot(t, 'nuevo_cliente', (_) => const CustomerFormScreen()));
 }

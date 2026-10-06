@@ -70,21 +70,32 @@ void main() {
     await ws.cancelPresale(discarded, 'Me equivoqué');
     expect(await db.presale(discarded.id), isNull, reason: 'un pedido que nunca salió se retira de la cola y desaparece');
 
+    // Editar un pedido que todavía no salió del teléfono corrige la operación en la cola (no crea otra).
+    await ws.updatePresale(presale,
+        items: [PresaleItem(productId: gra.id, productName: gra.name, weightKg: 9, quantity: 4, unitPrice: gra.referencePrice!)],
+        address: customer.primaryAddress,
+        scheduledDeliveryDate: '2026-10-09',
+        notes: 'Prueba offline (corregido)');
+
     final queued = await db.outbox();
-    expect(queued.map((o) => o.type), ['CUSTOMER_CREATE', 'GPS_POSITION', 'PRESALE_CREATE', 'GPS_POSITION']);
+    // Tomar un pedido registra también la visita; el pedido descartado deja su visita (la visita sí ocurrió).
+    expect(queued.map((o) => o.type),
+        ['CUSTOMER_CREATE', 'GPS_POSITION', 'PRESALE_CREATE', 'GPS_POSITION', 'VISIT_CREATE', 'VISIT_CREATE']);
+    final createOp = queued.firstWhere((o) => o.type == 'PRESALE_CREATE');
+    expect((createOp.payload['items'] as List).first['weightKg'], 9, reason: 'la edición quedó en la operación pendiente');
 
     await expectLater(SyncEngine(db: db, api: offline, deviceUuid: device).run(), throwsA(isA<OfflineException>()));
-    expect((await db.outbox()).length, 4, reason: 'sin señal nada se pierde ni sale de la cola');
+    expect((await db.outbox()).length, 6, reason: 'sin señal nada se pierde ni sale de la cola');
     expect((await db.customers()).any((c) => c.id == customer.id && c.pendingSync), isTrue, reason: 'el cliente nuevo ya es usable sin conexión');
 
     // 3. Vuelve la señal; el servidor procesa el lote pero la respuesta se pierde (el teléfono no se entera).
     final lost = await online.sync(device, 'test', queued.map((o) => o.toSyncJson()).toList());
     expect((lost['results'] as List).every((r) => r['status'] == 'SYNCED'), isTrue);
-    expect((await db.outbox()).length, 4);
+    expect((await db.outbox()).length, 6);
 
     // 4. La app reintenta con la misma cola: el servidor reconoce los ids y no duplica.
     final report = await SyncEngine(db: db, api: online, deviceUuid: device).run();
-    expect(report.synced, 4);
+    expect(report.synced, 6);
     expect(report.failed, 0);
     expect(await db.outbox(), isEmpty);
 
@@ -100,7 +111,25 @@ void main() {
     final boot = await online.bootstrap();
     final serverPresales = (boot['presales'] as List).where((p) => p['id'] == presale.id).toList();
     expect(serverPresales.length, 1);
-    expect(double.parse(serverPresales.first['totalAmount'].toString()), closeTo(8.5 * gra.referencePrice!, 0.01));
+    expect(double.parse(serverPresales.first['totalAmount'].toString()), closeTo(9 * gra.referencePrice!, 0.01));
+
+    // 5. Con el pedido ya en el servidor: editar, agregar dirección y registrar visita sin pedido.
+    final synced = (await db.presale(presale.id))!;
+    await ws.updatePresale(synced,
+        items: [PresaleItem(productId: gra.id, productName: gra.name, weightKg: 12, unitPrice: gra.referencePrice!)], notes: 'Subió a 12 kg');
+    final serverCustomer = (await db.customers()).firstWhere((c) => c.id == customer.id);
+    await ws.addAddress(serverCustomer, label: 'Depósito', address: 'Av. Alemana, 4to anillo', location: GeoPoint(-17.75, -63.17));
+    await ws.recordVisit(customer: serverCustomer, outcome: 'CLOSED', notes: 'Cerrado por feriado');
+    expect((await db.outbox()).map((o) => o.type), ['PRESALE_UPDATE', 'CUSTOMER_ADDRESS_ADD', 'VISIT_CREATE']);
+    final r2 = await SyncEngine(db: db, api: online, deviceUuid: device).run();
+    expect(r2.failed, 0);
+    expect(await db.outbox(), isEmpty);
+    final after = (await online.bootstrap());
+    final serverPresale = (after['presales'] as List).firstWhere((p) => p['id'] == presale.id);
+    expect(double.parse(serverPresale['totalAmount'].toString()), closeTo(12 * gra.referencePrice!, 0.01));
+    expect(serverPresale['notes'], 'Subió a 12 kg');
+    final serverAddresses = ((after['customers'] as List).firstWhere((c) => c['id'] == customer.id)['addresses'] as List);
+    expect(serverAddresses.length, 2, reason: 'principal + adicional');
   });
 
   test('rechazo del servidor: queda en la cola con su mensaje y se puede descartar', () async {
@@ -112,13 +141,17 @@ void main() {
     final p = await ws.createPresale(customer: ghost, items: [PresaleItem(productId: gra.id, productName: gra.name, weightKg: 2, unitPrice: 15)]);
 
     final report = await SyncEngine(db: db, api: online, deviceUuid: device).run();
-    expect(report.failed, 1);
-    final op = (await db.outbox()).single;
-    expect(op.state, 'review');
-    expect(op.error, contains('no existe'));
+    // El pedido y su visita se rechazan: ambos quedan en la cola con su motivo.
+    expect(report.failed, 2);
+    final ops = await db.outbox();
+    expect(ops.map((o) => o.type), ['PRESALE_CREATE', 'VISIT_CREATE']);
+    expect(ops.every((o) => o.state == 'review'), isTrue);
+    expect(ops.first.error, contains('no existe'));
     expect((await db.presale(p.id))!.syncState, SyncState.error);
 
-    await ws.discard(op);
+    for (final op in ops) {
+      await ws.discard(op);
+    }
     expect(await db.outbox(), isEmpty);
     expect(await db.presale(p.id), isNull);
   });
