@@ -421,3 +421,33 @@ export interface ReceivablesReport {
   buckets: { label: string; amount: Dec }[];
   customers: Debtor[];
 }
+
+// ── Preventas ──────────────────────────────────────────────
+export type PresaleStatus = 'PENDING' | 'CONFIRMED' | 'ASSIGNED' | 'DELIVERED' | 'CANCELLED';
+
+export interface PresaleListItem {
+  id: string;
+  presaleNumber: string;
+  status: PresaleStatus;
+  totalAmount: Dec;
+  scheduledDeliveryDate: string | null;
+  createdOffline: boolean;
+  createdAtDevice: string | null;
+  createdAt: string;
+  customer: { id: string; code: string; name: string };
+  preventista: { id: string; fullName: string };
+  sale: { id: string; saleNumber: string } | null;
+  _count: { items: number };
+}
+
+export interface PresaleDetail extends Omit<PresaleListItem, '_count' | 'sale'> {
+  notes: string | null;
+  latitude: Dec | null;
+  longitude: Dec | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  customer: { id: string; code: string; name: string; phone: string | null; creditEnabled: boolean };
+  address: CustomerAddress | null;
+  sale: { id: string; saleNumber: string; totalAmount: Dec } | null;
+  items: { id: string; productId: string; weightKg: Dec; quantity: Dec; unitPrice: Dec; subtotal: Dec; notes: string | null; product: Ref }[];
+}

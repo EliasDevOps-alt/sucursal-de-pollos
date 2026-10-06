@@ -19,12 +19,12 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconAlertTriangle, IconLock, IconPlus, IconStack2, IconTrash } from '@tabler/icons-react';
+import { IconAlertTriangle, IconDeviceMobile, IconLock, IconPlus, IconStack2, IconTrash } from '@tabler/icons-react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, apiErrorMessage } from '../../api/client';
-import type { Customer, Product, SaleDetail, SaleQuote, Warehouse } from '../../api/types';
+import type { Customer, PresaleDetail, Product, SaleDetail, SaleQuote, Warehouse } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/PageHeader';
 import { fmtBob, fmtDate, fmtKg, fmtPct, fmtPerKg, PAYMENT_STATUS } from '../../lib/format';
@@ -61,6 +61,23 @@ export function SaleNewPage() {
   const [notes, setNotes] = useState('');
   const [pickerFor, setPickerFor] = useState<string | null>(null);
 
+  // Atender una preventa: /ventas/nueva?preventa=ID precarga cliente, productos y notas.
+  const [searchParams] = useSearchParams();
+  const presaleId = searchParams.get('preventa');
+  const presale = useQuery({
+    queryKey: ['presales', presaleId],
+    queryFn: async () => (await api.get<PresaleDetail>(`/presales/${presaleId}`)).data,
+    enabled: !!presaleId,
+  });
+  useEffect(() => {
+    const p = presale.data;
+    if (!p) return;
+    setCustomerId(p.customer.id);
+    setCustomerSearch(p.customer.name);
+    setLines(p.items.map((i) => ({ ...newLine(), productId: i.productId, weightKg: Number(i.weightKg) })));
+    setNotes(p.notes ? `Preventa ${p.presaleNumber}: ${p.notes}` : `Preventa ${p.presaleNumber}`);
+  }, [presale.data]);
+
   const warehouses = useQuery({
     queryKey: ['warehouses'],
     queryFn: async () => (await api.get<Warehouse[]>('/warehouses')).data,
@@ -95,8 +112,9 @@ export function SaleNewPage() {
       forceReason: forceReason.trim() || undefined,
       creditExceptionReason: creditReason.trim() || undefined,
       notes: notes.trim() || undefined,
+      presaleId: presaleId ?? undefined,
     };
-  }, [effectiveWarehouse, customerId, validLines, paymentMethod, forceReason, creditReason, notes]);
+  }, [effectiveWarehouse, customerId, validLines, paymentMethod, forceReason, creditReason, notes, presaleId]);
 
   // La vista previa se pide sin el pago para conocer el total; el pago se agrega después.
   const [debouncedPayload] = useDebouncedValue(payload, 350);
@@ -133,6 +151,7 @@ export function SaleNewPage() {
       qc.invalidateQueries({ queryKey: ['sales'] });
       qc.invalidateQueries({ queryKey: ['lots'] });
       qc.invalidateQueries({ queryKey: ['customers'] });
+      qc.invalidateQueries({ queryKey: ['presales'] });
       navigate(`/ventas/${sale.id}`);
     },
     onError: notifyError,
@@ -146,6 +165,12 @@ export function SaleNewPage() {
   return (
     <>
       <PageHeader title="Nueva venta" subtitle="El sistema asigna los lotes por vencimiento y calcula precio, descuento y crédito" />
+      {presale.data && (
+        <Alert mb="md" color="blue" icon={<IconDeviceMobile size={16} />} title={`Atendiendo la preventa ${presale.data.presaleNumber}`}>
+          Pedido de {presale.data.customer.name} tomado por {presale.data.preventista.fullName}. Puede ajustar los kilos según lo pesado;
+          el precio final sale de los lotes asignados.
+        </Alert>
+      )}
       <Grid gutter="md">
         <Grid.Col span={{ base: 12, lg: 7 }}>
           <Stack>

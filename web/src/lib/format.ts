@@ -75,3 +75,11 @@ export const RECEIVABLE_LABELS: Record<string, string> = {
   ANNUL: 'Anulación de venta',
   ADJUSTMENT: 'Ajuste',
 };
+
+export const PRESALE_STATUS: Record<string, { label: string; color: string }> = {
+  PENDING: { label: 'Pendiente', color: 'yellow' },
+  CONFIRMED: { label: 'Confirmada', color: 'blue' },
+  ASSIGNED: { label: 'En ruta', color: 'grape' },
+  DELIVERED: { label: 'Atendida', color: 'green' },
+  CANCELLED: { label: 'Cancelada', color: 'gray' },
+};

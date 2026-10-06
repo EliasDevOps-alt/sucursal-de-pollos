@@ -24,5 +24,5 @@ Fuera de la demo (fases siguientes): rutas, entregas con firma, GPS, cobranza, c
 | B | Proveedores, productos, compra, recepción, merma, lotes (API + panel web) | Completada |
 | C | Clientes, kardex, stock, venta FEFO multi-lote, crédito y autorizaciones (API + panel web) | Completada |
 | D | Dashboard y reportes: rentabilidad, merma, cuentas por cobrar, alertas (API + panel web) | Completada |
-| E | App Flutter: preventa offline + sincronización | Pendiente |
+| E | App Flutter de preventa offline + sincronización idempotente + preventas en la web | Completada |
 | F | Datos realistas, despliegue y guion de demo | Pendiente |

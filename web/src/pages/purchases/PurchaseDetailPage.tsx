@@ -16,7 +16,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <div>
       <Text size="xs" c="dimmed">{label}</Text>
-      <Text fw={500}>{children}</Text>
+      <Text fw={500} component="div">{children}</Text>
     </div>
   );
 }

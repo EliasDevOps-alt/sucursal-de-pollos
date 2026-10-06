@@ -8,7 +8,7 @@ Prototipo funcional del ERP para compra, distribución y comercialización de po
 |---|---|---|
 | `backend/` | API central y reglas de negocio | NestJS + Prisma + PostgreSQL |
 | `web/` | Panel administrativo | React + Vite + Mantine |
-| `mobile/` | App Android para preventistas | Flutter (fase E) |
+| `mobile/` | App Android de preventa offline | Flutter + SQLite ([ver README](mobile/README.md)) |
 | `docs/` | Decisiones técnicas y alcance de la demo | — |
 
 ## Requisitos

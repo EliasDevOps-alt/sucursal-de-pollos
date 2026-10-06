@@ -19,3 +19,8 @@ Desviaciones y precisiones respecto al *Documento de Diseño de Base de Datos v1
 15. **Deuda por movimientos.** Se añadieron `payments` y `receivable_movements` (mínimos) para que `customers.current_debt` nunca cambie sin un movimiento que lo respalde.
 16. **Anulación de venta.** Devuelve el stock a los mismos lotes (movimiento `SALE_ANNUL`) y revierte la parte a crédito. El reembolso de lo cobrado queda anotado en auditoría; el módulo de caja está fuera de la demo.
 17. **Lotes vencidos** no se ofrecen ni se pueden vender; siguen contando en el stock hasta darse de baja.
+18. **IDs generados en el móvil.** Clientes y preventas creados offline llevan UUID del teléfono; el servidor los respeta. Así un pedido puede referirse a un cliente aún no sincronizado.
+19. **Sincronización por lote ordenado.** `POST /mobile/sync` procesa cada operación en su propia transacción. Ya sincronizada → devuelve el resultado anterior (idempotencia). Error de negocio → `REVIEW` con mensaje, sin bloquear las demás; se puede reintentar con el mismo id.
+20. **Conflictos visibles, nunca silenciosos.** Si el teléfono cancela un pedido que ya fue atendido, el servidor lo rechaza y el teléfono lo muestra; nada se sobrescribe.
+21. **Token móvil de 7 días** para que el preventista pueda trabajar varios días sin señal; si vence, se reingresa sin perder la cola.
+22. **GPS del teléfono** por evento (pedido, alta de cliente) y periódico cada ~10 min con la app abierta, en `gps_positions`.

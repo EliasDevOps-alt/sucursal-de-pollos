@@ -9,6 +9,8 @@ import { InventoryPage } from './pages/InventoryPage';
 import { LoginPage } from './pages/LoginPage';
 import { LotDetailPage } from './pages/lots/LotDetailPage';
 import { LotsPage } from './pages/lots/LotsPage';
+import { PresaleDetailPage } from './pages/presales/PresaleDetailPage';
+import { PresalesPage } from './pages/presales/PresalesPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { PurchaseDetailPage } from './pages/purchases/PurchaseDetailPage';
 import { PurchaseNewPage } from './pages/purchases/PurchaseNewPage';
@@ -49,6 +51,8 @@ export function App() {
         <Route path="ventas" element={<SalesPage />} />
         <Route path="ventas/nueva" element={<SaleNewPage />} />
         <Route path="ventas/:id" element={<SaleDetailPage />} />
+        <Route path="preventas" element={<PresalesPage />} />
+        <Route path="preventas/:id" element={<PresaleDetailPage />} />
         <Route path="clientes" element={<CustomersPage />} />
         <Route path="clientes/:id" element={<CustomerDetailPage />} />
         <Route path="inventario" element={<InventoryPage />} />
