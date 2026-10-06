@@ -2,7 +2,15 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsDateString, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 
-export const OPERATION_TYPES = ['CUSTOMER_CREATE', 'PRESALE_CREATE', 'PRESALE_CANCEL', 'GPS_POSITION'] as const;
+export const OPERATION_TYPES = [
+  'CUSTOMER_CREATE',
+  'CUSTOMER_ADDRESS_ADD',
+  'PRESALE_CREATE',
+  'PRESALE_UPDATE',
+  'PRESALE_CANCEL',
+  'VISIT_CREATE',
+  'GPS_POSITION',
+] as const;
 export type OperationType = (typeof OPERATION_TYPES)[number];
 
 export class RegisterDeviceDto {

@@ -109,6 +109,13 @@ enum PaymentRecordStatus {
   ANNULLED
 }
 
+enum VisitOutcome {
+  ORDER // se tomó pedido
+  NO_ORDER // atendió pero no compró
+  CLOSED // local cerrado
+  NOT_FOUND // no se encontró al responsable
+}
+
 enum CustomerStatus {
   ACTIVE
   INACTIVE
@@ -195,6 +202,7 @@ model User {
   devices              Device[]
   syncOperations       SyncOperation[]      @relation("SyncOperationUser")
   syncResolutions      SyncOperation[]      @relation("SyncResolvedBy")
+  visits               Visit[]
   lotPrices            LotPrice[]
   gpsPositions         GpsPosition[]
 
@@ -574,6 +582,7 @@ model Customer {
   presales            Presale[]
   payments            Payment[]
   receivableMovements ReceivableMovement[]
+  visits              Visit[]
 
   @@map("customers")
 }
@@ -828,6 +837,26 @@ model SyncOperation {
 
   @@index([status, resolvedAt])
   @@map("sync_operations")
+}
+
+// Visita del preventista a un cliente, con o sin pedido (registro de visitas del alcance §6.4).
+model Visit {
+  id              String       @id @db.Uuid // generado en el móvil
+  preventistaId   String       @map("preventista_id") @db.Uuid
+  customerId      String       @map("customer_id") @db.Uuid
+  outcome         VisitOutcome
+  notes           String?
+  presaleId       String?      @map("presale_id") @db.Uuid
+  latitude        Decimal?     @db.Decimal(10, 7)
+  longitude       Decimal?     @db.Decimal(10, 7)
+  visitedAtDevice DateTime     @map("visited_at_device")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  preventista User     @relation(fields: [preventistaId], references: [id])
+  customer    Customer @relation(fields: [customerId], references: [id])
+
+  @@index([preventistaId, visitedAtDevice])
+  @@map("visits")
 }
 
 // GPS del teléfono: por evento (pedido, alta de cliente) o periódico (~10 min). No es GPS vehicular.

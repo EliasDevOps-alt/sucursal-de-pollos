@@ -47,6 +47,52 @@ export class PresalesService {
     return presale;
   }
 
+  /** Usuarios con rol de preventista, para elegir de quién ver el recorrido. */
+  preventistas() {
+    return this.prisma.user.findMany({
+      where: { role: { code: 'PRESELLER' } },
+      select: { id: true, fullName: true, isActive: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
+  /**
+   * Recorrido de un preventista en un día (fecha local de Bolivia): posiciones GPS, visitas y pedidos,
+   * en orden cronológico para dibujar la trayectoria.
+   */
+  async activity(userId: string, date: string) {
+    const start = new Date(`${date}T00:00:00-04:00`);
+    const end = new Date(start.getTime() + 86_400_000);
+    const [positions, visits, presales] = await Promise.all([
+      this.prisma.gpsPosition.findMany({
+        where: { userId, capturedAtDevice: { gte: start, lt: end } },
+        select: { id: true, latitude: true, longitude: true, accuracyMeters: true, eventType: true, capturedAtDevice: true },
+        orderBy: { capturedAtDevice: 'asc' },
+      }),
+      this.prisma.visit.findMany({
+        where: { preventistaId: userId, visitedAtDevice: { gte: start, lt: end } },
+        include: { customer: { select: { id: true, name: true } } },
+        orderBy: { visitedAtDevice: 'asc' },
+      }),
+      this.prisma.presale.findMany({
+        where: { preventistaId: userId, OR: [{ createdAtDevice: { gte: start, lt: end } }, { createdAtDevice: null, createdAt: { gte: start, lt: end } }] },
+        select: {
+          id: true,
+          presaleNumber: true,
+          status: true,
+          totalAmount: true,
+          latitude: true,
+          longitude: true,
+          createdAtDevice: true,
+          createdAt: true,
+          customer: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+    return { date, positions, visits, presales };
+  }
+
   async cancel(id: string, reason: string, actor: AuthUser) {
     await this.prisma.$transaction(async (tx) => {
       const [p] = await tx.$queryRaw<{ status: PresaleStatus }[]>`SELECT status FROM presales WHERE id = ${id}::uuid FOR UPDATE`;

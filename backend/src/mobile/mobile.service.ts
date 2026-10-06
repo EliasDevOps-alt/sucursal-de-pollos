@@ -6,11 +6,14 @@ import { D, kg, money, ZERO } from '../common/decimal';
 import { SequenceService } from '../common/sequence.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  CustomerAddressAddPayload,
   CustomerCreatePayload,
   GpsPositionPayload,
   parsePayload,
   PresaleCancelPayload,
   PresaleCreatePayload,
+  PresaleUpdatePayload,
+  VisitCreatePayload,
 } from './dto/payloads';
 import { RegisterDeviceDto, SyncOperationDto, SyncRequestDto } from './dto/sync.dto';
 
@@ -156,6 +159,8 @@ export class MobileService {
       customerName: p.customer.name,
       totalAmount: p.totalAmount,
       scheduledDeliveryDate: p.scheduledDeliveryDate,
+      addressId: p.addressId,
+      notes: p.notes,
       // Hora en que el preventista tomó el pedido (no la de llegada al servidor).
       createdAt: p.createdAtDevice ?? p.createdAt,
       cancelReason: p.cancelReason,
@@ -343,6 +348,103 @@ export class MobileService {
         await tx.presale.update({ where: { id: presale.id }, data: { status: PresaleStatus.CANCELLED, cancelledAt: new Date(), cancelReason: p.reason } });
         await this.audit.log({ userId: user.id, action: 'presales.cancel', entityType: 'presale', entityId: presale.id, reason: p.reason, deviceId }, tx);
         return { entityType: 'presale', entityId: presale.id, reference: presale.presale_number };
+      }
+
+      case 'PRESALE_UPDATE': {
+        need('presales.create');
+        const p = await parsePayload(PresaleUpdatePayload, op.payload);
+        const [presale] = await tx.$queryRaw<{ id: string; status: PresaleStatus; preventista_id: string; presale_number: string; customer_id: string }[]>`
+          SELECT id, status, preventista_id, presale_number, customer_id FROM presales WHERE id = ${p.presaleId}::uuid FOR UPDATE`;
+        if (!presale) throw new OperationError('El pedido no existe en el servidor');
+        if (presale.preventista_id !== user.id) throw new OperationError('Solo puede modificar sus propios pedidos');
+        if (presale.status !== PresaleStatus.PENDING && presale.status !== PresaleStatus.CONFIRMED) {
+          // Regla del alcance: un pedido no se modifica después de atendido o asignado a ruta.
+          throw new OperationError(`El pedido ${presale.presale_number} ya fue ${presale.status === PresaleStatus.DELIVERED ? 'atendido' : presale.status === PresaleStatus.CANCELLED ? 'cancelado' : 'asignado a ruta'} y no puede modificarse`);
+        }
+        if (p.addressId && !(await tx.customerAddress.findFirst({ where: { id: p.addressId, customerId: presale.customer_id } }))) {
+          throw new OperationError('La dirección no pertenece al cliente');
+        }
+        const productIds = [...new Set(p.items.map((i) => i.productId))];
+        if ((await tx.product.count({ where: { id: { in: productIds }, isActive: true } })) !== productIds.length) {
+          throw new OperationError('El pedido incluye productos inexistentes o inactivos');
+        }
+        const before = await tx.presale.findUniqueOrThrow({ where: { id: presale.id }, include: { items: true } });
+        const items = p.items.map((i) => ({
+          productId: i.productId,
+          weightKg: kg(D(i.weightKg)),
+          quantity: D(i.quantity ?? 0),
+          unitPrice: D(i.unitPrice),
+          subtotal: money(D(i.weightKg).times(i.unitPrice)),
+          notes: i.notes,
+        }));
+        await tx.presaleItem.deleteMany({ where: { presaleId: presale.id } });
+        await tx.presale.update({
+          where: { id: presale.id },
+          data: {
+            addressId: p.addressId,
+            scheduledDeliveryDate: p.scheduledDeliveryDate ? new Date(p.scheduledDeliveryDate) : undefined,
+            notes: p.notes,
+            totalAmount: money(items.reduce((s, i) => s.plus(i.subtotal), ZERO)),
+            items: { create: items },
+          },
+        });
+        await this.audit.log(
+          {
+            userId: user.id,
+            action: 'presales.update',
+            entityType: 'presale',
+            entityId: presale.id,
+            oldData: { total: before.totalAmount, items: before.items.map((i) => ({ productId: i.productId, weightKg: i.weightKg })) },
+            newData: { items: items.map((i) => ({ productId: i.productId, weightKg: i.weightKg })) },
+            deviceId,
+          },
+          tx,
+        );
+        return { entityType: 'presale', entityId: presale.id, reference: presale.presale_number };
+      }
+
+      case 'CUSTOMER_ADDRESS_ADD': {
+        need('customers.manage');
+        const p = await parsePayload(CustomerAddressAddPayload, op.payload);
+        const customer = await tx.customer.findUnique({ where: { id: p.customerId } });
+        if (!customer) throw new OperationError('El cliente no existe (¿falló su alta?)');
+        const hasPrimary = (await tx.customerAddress.count({ where: { customerId: p.customerId, isPrimary: true, isActive: true } })) > 0;
+        await tx.customerAddress.create({
+          data: {
+            id: p.id,
+            customerId: p.customerId,
+            label: p.label,
+            address: p.address,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            // La dirección principal no cambia sin una operación autorizada: las nuevas son adicionales.
+            isPrimary: !hasPrimary,
+            source: 'PRESALE',
+            capturedById: user.id,
+          },
+        });
+        await this.audit.log({ userId: user.id, action: 'customers.address_add', entityType: 'customer', entityId: p.customerId, newData: { label: p.label, address: p.address }, deviceId }, tx);
+        return { entityType: 'customer_address', entityId: p.id, reference: null };
+      }
+
+      case 'VISIT_CREATE': {
+        need('presales.create');
+        const p = await parsePayload(VisitCreatePayload, op.payload);
+        if (!(await tx.customer.findUnique({ where: { id: p.customerId } }))) throw new OperationError('El cliente de la visita no existe');
+        await tx.visit.create({
+          data: {
+            id: p.id,
+            preventistaId: user.id,
+            customerId: p.customerId,
+            outcome: p.outcome,
+            notes: p.notes,
+            presaleId: p.presaleId,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            visitedAtDevice: new Date(op.createdAtDevice),
+          },
+        });
+        return { entityType: 'visit', entityId: p.id, reference: null };
       }
 
       case 'GPS_POSITION': {

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseEnumPipe, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseEnumPipe, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { PresaleStatus } from '@prisma/client';
 import { AuthUser } from '../auth/auth-user';
@@ -19,6 +19,20 @@ export class PresalesController {
   @ApiQuery({ name: 'status', enum: PresaleStatus, required: false })
   findAll(@CurrentUser() user: AuthUser, @Query('status', new ParseEnumPipe(PresaleStatus, { optional: true })) status?: PresaleStatus) {
     return this.presales.findAll(user, status);
+  }
+
+  @Get('preventistas')
+  @RequirePermissions(PERMISSIONS.PRESALES_VIEW_ALL)
+  preventistas() {
+    return this.presales.preventistas();
+  }
+
+  /** Recorrido del día: GET /presales/activity?userId=…&date=AAAA-MM-DD */
+  @Get('activity')
+  @RequirePermissions(PERMISSIONS.PRESALES_VIEW_ALL)
+  activity(@Query('userId', ParseUUIDPipe) userId: string, @Query('date') date: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) throw new BadRequestException('Fecha inválida (use AAAA-MM-DD)');
+    return this.presales.activity(userId, date);
   }
 
   @Get(':id')

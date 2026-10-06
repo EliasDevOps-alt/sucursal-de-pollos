@@ -130,6 +130,62 @@ export class PresaleCancelPayload {
   reason: string;
 }
 
+/** Edición de un pedido ya enviado: reemplaza productos, fecha, dirección y notas (solo si sigue pendiente). */
+export class PresaleUpdatePayload {
+  @IsUUID()
+  presaleId: string;
+
+  @IsOptional()
+  @IsUUID()
+  addressId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  scheduledDeliveryDate?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsArray()
+  @ArrayMinSize(1, { message: 'El pedido no tiene productos' })
+  @ValidateNested({ each: true })
+  @Type(() => PresaleItemPayload)
+  items: PresaleItemPayload[];
+}
+
+export class CustomerAddressAddPayload extends MobileAddressPayload {
+  @IsUUID()
+  customerId: string;
+}
+
+export class VisitCreatePayload {
+  @IsUUID()
+  id: string;
+
+  @IsUUID()
+  customerId: string;
+
+  @IsIn(['ORDER', 'NO_ORDER', 'CLOSED', 'NOT_FOUND'], { message: 'Resultado de visita inválido (ORDER, NO_ORDER, CLOSED o NOT_FOUND)' })
+  outcome: 'ORDER' | 'NO_ORDER' | 'CLOSED' | 'NOT_FOUND';
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsOptional()
+  @IsUUID()
+  presaleId?: string;
+
+  @IsOptional()
+  @IsLatitude()
+  latitude?: number;
+
+  @IsOptional()
+  @IsLongitude()
+  longitude?: number;
+}
+
 export class GpsPositionPayload {
   @IsLatitude()
   latitude: number;
