@@ -13,6 +13,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { LotsModule } from './lots/lots.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PurchasesModule } from './purchases/purchases.module';
+import { ReportsModule } from './reports/reports.module';
 import { SalesModule } from './sales/sales.module';
 import { UsersModule } from './users/users.module';
 
@@ -30,6 +31,7 @@ import { UsersModule } from './users/users.module';
     LotsModule,
     CustomersModule,
     SalesModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   providers: [

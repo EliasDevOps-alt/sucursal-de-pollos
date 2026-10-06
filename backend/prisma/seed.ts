@@ -97,19 +97,19 @@ async function seedCatalogs() {
   const cat = Object.fromEntries((await prisma.productCategory.findMany()).map((c) => [c.code, c.id]));
 
   const products = [
-    { code: 'PE-SOF', name: 'Pollo entero SOFIA', brand: 'SOFIA', category: 'ENT' },
-    { code: 'PE-PIO', name: 'Pollo entero PÍO', brand: 'PÍO', category: 'ENT' },
-    { code: 'PE-GRA', name: 'Pollo entero granja', brand: null, category: 'ENT' },
-    { code: 'DE-PEC', name: 'Pechuga', brand: null, category: 'DES' },
-    { code: 'DE-PIE', name: 'Pierna', brand: null, category: 'DES' },
-    { code: 'DE-ALA', name: 'Ala', brand: null, category: 'DES' },
-    { code: 'ME-HIG', name: 'Hígado', brand: null, category: 'MEN' },
+    { code: 'PE-SOF', name: 'Pollo entero SOFIA', brand: 'SOFIA', category: 'ENT', minStockKg: 150 },
+    { code: 'PE-PIO', name: 'Pollo entero PÍO', brand: 'PÍO', category: 'ENT', minStockKg: 150 },
+    { code: 'PE-GRA', name: 'Pollo entero granja', brand: null, category: 'ENT', minStockKg: 100 },
+    { code: 'DE-PEC', name: 'Pechuga', brand: null, category: 'DES', minStockKg: 40 },
+    { code: 'DE-PIE', name: 'Pierna', brand: null, category: 'DES', minStockKg: 40 },
+    { code: 'DE-ALA', name: 'Ala', brand: null, category: 'DES', minStockKg: 30 },
+    { code: 'ME-HIG', name: 'Hígado', brand: null, category: 'MEN', minStockKg: 10 },
   ];
   for (const p of products) {
     await prisma.product.upsert({
       where: { code: p.code },
-      update: {},
-      create: { code: p.code, name: p.name, brand: p.brand, categoryId: cat[p.category], saleUnit: SaleUnit.KG },
+      update: { minStockKg: p.minStockKg },
+      create: { code: p.code, name: p.name, brand: p.brand, categoryId: cat[p.category], saleUnit: SaleUnit.KG, minStockKg: p.minStockKg },
     });
   }
 
