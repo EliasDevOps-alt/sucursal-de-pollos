@@ -193,7 +193,8 @@ model User {
   receivableMovements  ReceivableMovement[]
   presales             Presale[]
   devices              Device[]
-  syncOperations       SyncOperation[]
+  syncOperations       SyncOperation[]      @relation("SyncOperationUser")
+  syncResolutions      SyncOperation[]      @relation("SyncResolvedBy")
   lotPrices            LotPrice[]
   gpsPositions         GpsPosition[]
 
@@ -816,10 +817,16 @@ model SyncOperation {
   createdAtDevice   DateTime   @map("created_at_device")
   receivedAtServer  DateTime   @default(now()) @map("received_at_server")
   errorMessage      String?    @map("error_message")
+  // Revisión administrativa de operaciones rechazadas (conflictos que no se resuelven solos).
+  resolvedAt        DateTime?  @map("resolved_at")
+  resolvedById      String?    @map("resolved_by_id") @db.Uuid
+  resolutionNote    String?    @map("resolution_note")
 
-  device Device @relation(fields: [deviceId], references: [id])
-  user   User   @relation(fields: [userId], references: [id])
+  device     Device @relation(fields: [deviceId], references: [id])
+  user       User   @relation("SyncOperationUser", fields: [userId], references: [id])
+  resolvedBy User?  @relation("SyncResolvedBy", fields: [resolvedById], references: [id])
 
+  @@index([status, resolvedAt])
   @@map("sync_operations")
 }
 

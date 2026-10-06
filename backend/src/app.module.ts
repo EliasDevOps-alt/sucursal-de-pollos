@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { AdminModule } from './admin/admin.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
@@ -38,6 +39,7 @@ import { UsersModule } from './users/users.module';
     PresalesModule,
     MobileModule,
     CollectionsModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [
