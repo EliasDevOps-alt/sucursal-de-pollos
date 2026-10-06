@@ -2,7 +2,6 @@ import { Alert, Anchor, Badge, Card, Grid, Group, SimpleGrid, Stack, Table, Text
 import { BarChart } from '@mantine/charts';
 import { IconAlertTriangle, IconPackageOff } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Dashboard, LotListItem } from '../api/types';
@@ -11,7 +10,7 @@ import { PageHeader } from '../components/PageHeader';
 import { QueryState } from '../components/QueryState';
 import { ChartCard } from '../components/viz/ChartCard';
 import { axisFormatterBob, BAR_MAX, chartChrome, compactBob, horizontalBars, surfaceGap } from '../components/viz/chartDefaults';
-import { presetRange, RangePicker, RangePreset } from '../components/viz/RangePicker';
+import { useDateRange } from '../components/viz/RangePicker';
 import { StatTile } from '../components/viz/StatTile';
 import { expiryColor, expiryLabel, fmtBob, fmtDate, fmtKg, fmtKgShort, fmtPct } from '../lib/format';
 
@@ -25,8 +24,7 @@ export function DashboardPage() {
 function ManagementDashboard() {
   const { user, can } = useAuth();
   const financial = can('reports.financial');
-  const [preset, setPreset] = useState<RangePreset>('30');
-  const range = presetRange(preset);
+  const { range, picker } = useDateRange('30');
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['dashboard', range],
@@ -53,7 +51,7 @@ function ManagementDashboard() {
       <PageHeader
         title={`Hola, ${user?.fullName.split(' ')[0]}`}
         subtitle={data ? `Del ${fmtDate(data.range.from)} al ${fmtDate(data.range.to)}, comparado con el período anterior` : 'Resumen de la operación'}
-        actions={<RangePicker value={preset} onChange={setPreset} />}
+        actions={picker}
       />
       <QueryState isLoading={isLoading} error={error}>
         {data && k && (

@@ -9,7 +9,7 @@ import { PageHeader } from '../components/PageHeader';
 import { QueryState } from '../components/QueryState';
 import { ChartCard } from '../components/viz/ChartCard';
 import { axisFormatterBob, BAR_MAX, chartChrome, compactBob, horizontalBars } from '../components/viz/chartDefaults';
-import { presetRange, RangePicker, RangePreset } from '../components/viz/RangePicker';
+import { useDateRange } from '../components/viz/RangePicker';
 import { StatTile } from '../components/viz/StatTile';
 import { fmtBob, fmtDate, fmtDateTime, fmtKg, fmtPct, TREATMENT_LABELS } from '../lib/format';
 
@@ -304,15 +304,14 @@ export function ReportsPage() {
   const requested = params.get('tab');
   // Un valor desconocido o vacío vuelve a la primera pestaña en lugar de dejar la página en blanco.
   const tab = requested && ['profitability', 'shrinkage', 'receivables'].includes(requested) ? requested : 'profitability';
-  const [preset, setPreset] = useState<RangePreset>('30');
-  const range = presetRange(preset);
+  const { range, picker } = useDateRange('30');
 
   return (
     <>
       <PageHeader
         title="Reportes"
         subtitle="Rentabilidad con el costo real de cada lote, merma y cuentas por cobrar"
-        actions={tab !== 'receivables' && <RangePicker value={preset} onChange={setPreset} />}
+        actions={tab !== 'receivables' && picker}
       />
       <Tabs value={tab} onChange={(v) => setParams(v ? { tab: v } : {})} keepMounted={false}>
         <Tabs.List mb="md">

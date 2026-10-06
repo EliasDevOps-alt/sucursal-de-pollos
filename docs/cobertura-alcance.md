@@ -66,7 +66,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - 🟡 Cancelación antes de atender sí; modificación del pedido no
 - ✅ Consulta de preventas propias
 - ✅ Trabajo offline y sincronización idempotente
-- 🟡 Trayectoria GPS: se registran posiciones por evento y cada ~10 min, pero no hay registro de visitas ni mapa de trayectoria en la web
+- ✅ Trayectoria GPS: posiciones por evento y cada ~10 min, visitas con resultado (con pedido, sin pedido, cerrado, responsable ausente) y página web **Recorrido** con mapa (OpenStreetMap), trayectoria, pedidos, visitas y línea de tiempo por preventista y día
 
 ### 6.5 Logística y distribución — pendiente completo
 - ❌ Vehículos propios y subcontratados, capacidad en kg y canastillos
@@ -104,7 +104,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Reportes de ventas, inventario, merma, rentabilidad (por producto, lote, cliente y vendedor) y cobranza (antigüedad)
 - 🟡 Compras y clientes: listados, sin reporte dedicado
 - ❌ Reportes de logística, sucursales y canastillos
-- 🟡 Filtros: rangos de fecha predefinidos y algunos filtros por producto/almacén; faltan rango libre y filtros por sucursal, categoría, usuario, vehículo y cliente en todos los reportes
+- 🟡 Filtros: rangos de fecha predefinidos y **rango libre** (hasta un año) en tablero, reportes y auditoría, y algunos filtros por producto/almacén; faltan filtros por sucursal, categoría, usuario, vehículo y cliente en todos los reportes
 - ✅ Gráficos históricos
 
 ### 7. Reglas de negocio
@@ -138,7 +138,7 @@ Pendientes: `vehicles`, `product_ranges`, `lot_shrinkages` (la merma está en el
 
 | Fase | Contenido | Estimación* |
 |---|---|---|
-| G. Brechas del núcleo | **Cobros de deuda** (web), pantallas de usuarios/roles, categorías y tipos de cliente, visor de auditoría, revisión de conflictos de sincronización, modificar preventa, direcciones adicionales y visitas en la app, rango de fechas libre | 1–1,5 semanas |
+| G. Brechas del núcleo ✅ | **Cobros de deuda** (web), pantallas de usuarios/roles, categorías y tipos de cliente, visor de auditoría, revisión de conflictos de sincronización, modificar preventa, direcciones adicionales y visitas en la app, rango de fechas libre | 1–1,5 semanas |
 | H. Inventario operativo | Transferencias central–sucursal (con peso recibido), ajustes con motivo, bajas y pérdidas, devoluciones autorizadas | 1–1,5 semanas |
 | I. Logística + app del chofer | Vehículos, rutas manuales (bloqueadas al iniciar), hoja de despacho, entregas offline con diferencias y problemas, firma digital, seguimiento GPS | 2,5–3 semanas |
 | J. Cobranza + app del cobrador + canastillos | Cobros offline, mapa de pendientes, recibo y firma, canastillos por cantidad y responsable, bajas y sanciones | 2–2,5 semanas |

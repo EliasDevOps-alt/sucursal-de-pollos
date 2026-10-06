@@ -6,7 +6,7 @@ import { api } from '../../api/client';
 import type { AuditLogRow, UserRow } from '../../api/types';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
-import { presetRange, RangePicker, RangePreset } from '../../components/viz/RangePicker';
+import { useDateRange } from '../../components/viz/RangePicker';
 import { fmtDateTime } from '../../lib/format';
 
 // Acciones críticas que el documento exige auditar: se resaltan.
@@ -28,13 +28,12 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
 }
 
 export function AuditPage() {
-  const [preset, setPreset] = useState<RangePreset>('7');
+  const { range, picker } = useDateRange('7');
   const [userId, setUserId] = useState<string | null>(null);
   const [action, setAction] = useState<string | null>(null);
   const [entityType, setEntityType] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [limit, setLimit] = useState(100);
-  const range = presetRange(preset);
   const users = useQuery({ queryKey: ['users'], queryFn: async () => (await api.get<UserRow[]>('/users')).data });
 
   const params = {
@@ -52,7 +51,7 @@ export function AuditPage() {
 
   return (
     <>
-      <PageHeader title="Auditoría" subtitle="Quién hizo qué, cuándo, qué cambió y por qué" actions={<RangePicker value={preset} onChange={setPreset} />} />
+      <PageHeader title="Auditoría" subtitle="Quién hizo qué, cuándo, qué cambió y por qué" actions={picker} />
       <Group mb="sm" align="flex-end" wrap="wrap">
         <Select label="Usuario" placeholder="Todos" clearable searchable w={220} value={userId} onChange={setUserId}
           data={(users.data ?? []).map((u) => ({ value: u.id, label: u.fullName }))} />

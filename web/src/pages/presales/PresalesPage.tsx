@@ -1,15 +1,17 @@
-import { Anchor, Badge, Card, Group, SegmentedControl, Table, Text, Tooltip } from '@mantine/core';
-import { IconWifiOff } from '@tabler/icons-react';
+import { Anchor, Badge, Button, Card, Group, SegmentedControl, Table, Text, Tooltip } from '@mantine/core';
+import { IconMapPin, IconWifiOff } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
+import { useAuth } from '../../auth/AuthContext';
 import type { PresaleListItem } from '../../api/types';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { fmtBob, fmtDate, fmtDateTime, PRESALE_STATUS } from '../../lib/format';
 
 export function PresalesPage() {
+  const { can } = useAuth();
   const [status, setStatus] = useState('PENDING');
   const { data, isLoading, error } = useQuery({
     queryKey: ['presales', status],
@@ -19,7 +21,11 @@ export function PresalesPage() {
 
   return (
     <>
-      <PageHeader title="Preventas" subtitle="Pedidos tomados por los preventistas desde la app móvil" />
+      <PageHeader title="Preventas" subtitle="Pedidos tomados por los preventistas desde la app móvil"
+        actions={can('presales.view_all') && (
+          <Button component={Link} to="/preventas/recorrido" variant="light" leftSection={<IconMapPin size={16} />}>Ver recorrido</Button>
+        )}
+      />
       <SegmentedControl
         mb="sm"
         value={status}

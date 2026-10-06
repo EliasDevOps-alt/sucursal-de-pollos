@@ -40,6 +40,7 @@ export class ReportsService {
     const end = to ?? today;
     const start = from ?? this.shiftDays(end, -29);
     if (start > end) throw new BadRequestException('La fecha inicial es posterior a la final');
+    if (start < this.shiftDays(end, -366)) throw new BadRequestException('El rango no puede superar un año');
     return { from: start, to: end };
   }
 
