@@ -144,6 +144,7 @@ async function seedCatalogs() {
     { name: 'presale', prefix: 'P-' },
     { name: 'lot', prefix: 'L' },
     { name: 'customer', prefix: 'CLI-' },
+    { name: 'collection', prefix: 'R-' },
   ];
   for (const s of sequences) {
     await prisma.documentSequence.upsert({ where: { name: s.name }, update: {}, create: s });

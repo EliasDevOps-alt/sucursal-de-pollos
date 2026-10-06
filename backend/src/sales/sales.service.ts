@@ -15,6 +15,7 @@ import { AuthService } from '../auth/auth.service';
 import { AuthUser } from '../auth/auth-user';
 import { PERMISSIONS } from '../auth/permissions';
 import { D, kg, money, perKg, ZERO } from '../common/decimal';
+import { ReceivablesService } from '../common/receivables.service';
 import { SequenceService } from '../common/sequence.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -73,6 +74,7 @@ export class SalesService {
     private readonly inventory: InventoryService,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
+    private readonly receivables: ReceivablesService,
   ) {}
 
   // ── Consulta ────────────────────────────────────────────
@@ -553,7 +555,7 @@ export class SalesService {
     });
   }
 
-  private async receivable(
+  private receivable(
     tx: Db,
     customerId: string,
     type: ReceivableMovementType,
@@ -562,12 +564,7 @@ export class SalesService {
     actorId: string,
     reason?: string,
   ) {
-    const customer = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
-    const balanceAfter = money(D(customer.currentDebt).plus(amount));
-    await tx.receivableMovement.create({
-      data: { customerId, movementType: type, amount, balanceAfter, referenceType: 'sale', referenceId: saleId, reason, createdById: actorId },
-    });
-    await tx.customer.update({ where: { id: customerId }, data: { currentDebt: balanceAfter } });
+    return this.receivables.apply(tx, { customerId, type, amount, referenceType: 'sale', referenceId: saleId, actorId, reason });
   }
 
   private presentBuilt(b: Awaited<ReturnType<SalesService['build']>>) {

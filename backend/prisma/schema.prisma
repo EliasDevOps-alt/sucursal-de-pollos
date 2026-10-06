@@ -104,6 +104,11 @@ enum ReceivableMovementType {
   ADJUSTMENT
 }
 
+enum PaymentRecordStatus {
+  VALID
+  ANNULLED
+}
+
 enum CustomerStatus {
   ACTIVE
   INACTIVE
@@ -183,7 +188,8 @@ model User {
   lotOverrides         SaleLotAllocation[]
   creditAuthorizations Sale[]               @relation("SaleCreditAuthorizedBy")
   priceAuthorizations  SaleItem[]
-  paymentsReceived     Payment[]
+  paymentsReceived     Payment[]            @relation("PaymentReceivedBy")
+  paymentsAnnulled     Payment[]            @relation("PaymentAnnulledBy")
   receivableMovements  ReceivableMovement[]
   presales             Presale[]
   devices              Device[]
@@ -730,20 +736,28 @@ model PresaleItem {
 
 // Un pago tiene un solo método; un pago combinado se registra como varios pagos.
 model Payment {
-  id              String   @id @default(uuid()) @db.Uuid
-  customerId      String?  @map("customer_id") @db.Uuid
-  saleId          String?  @map("sale_id") @db.Uuid
-  amount          Decimal  @db.Decimal(14, 2)
-  paymentMethod   String   @map("payment_method")
-  paymentSource   String   @default("CENTRAL") @map("payment_source") // CENTRAL/BRANCH/DRIVER/COLLECTOR
-  receivedById    String   @map("received_by_id") @db.Uuid
-  paymentDate     DateTime @default(now()) @map("payment_date")
-  referenceNumber String?  @map("reference_number")
+  id              String              @id @default(uuid()) @db.Uuid
+  customerId      String?             @map("customer_id") @db.Uuid
+  saleId          String?             @map("sale_id") @db.Uuid
+  amount          Decimal             @db.Decimal(14, 2)
+  paymentMethod   String              @map("payment_method")
+  paymentSource   String              @default("CENTRAL") @map("payment_source") // CENTRAL/BRANCH/DRIVER/COLLECTOR
+  receivedById    String              @map("received_by_id") @db.Uuid
+  paymentDate     DateTime            @default(now()) @map("payment_date")
+  referenceNumber String?             @map("reference_number")
   notes           String?
+  // Cobros de deuda (sin venta asociada): número de recibo visible y anulación con motivo.
+  receiptNumber   String?             @unique @map("receipt_number")
+  isAdvance       Boolean             @default(false) @map("is_advance") // dejó saldo a favor
+  status          PaymentRecordStatus @default(VALID)
+  annulledAt      DateTime?           @map("annulled_at")
+  annulledById    String?             @map("annulled_by_id") @db.Uuid
+  annulReason     String?             @map("annul_reason")
 
   customer   Customer? @relation(fields: [customerId], references: [id])
   sale       Sale?     @relation(fields: [saleId], references: [id])
-  receivedBy User      @relation(fields: [receivedById], references: [id])
+  receivedBy User      @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
+  annulledBy User?     @relation("PaymentAnnulledBy", fields: [annulledById], references: [id])
 
   @@index([customerId, paymentDate])
   @@map("payments")

@@ -30,6 +30,10 @@ export const PERMISSIONS = {
   SALES_ANNUL: 'sales.annul',
   PRICE_MODIFY: 'price.modify',
   CREDIT_EXCEPTION_AUTHORIZE: 'credit.exception_authorize',
+  // Cobranza
+  COLLECTIONS_VIEW: 'collections.view',
+  COLLECTIONS_CREATE: 'collections.create',
+  COLLECTIONS_ANNUL: 'collections.annul',
   // Preventas
   PRESALES_VIEW_OWN: 'presales.view_own',
   PRESALES_VIEW_ALL: 'presales.view_all',
@@ -66,6 +70,9 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
   'sales.annul': 'Anular ventas',
   'price.modify': 'Modificar precio final en una venta',
   'credit.exception_authorize': 'Autorizar ventas que superan el límite de crédito',
+  'collections.view': 'Ver cobros de deuda',
+  'collections.create': 'Registrar cobros de deuda',
+  'collections.annul': 'Anular cobros de deuda',
   'presales.view_own': 'Ver preventas propias',
   'presales.view_all': 'Ver todas las preventas',
   'presales.create': 'Registrar preventas',
@@ -86,6 +93,7 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
       P.CATALOG_VIEW, P.LOTS_VIEW, P.INVENTORY_VIEW,
       P.CUSTOMERS_VIEW, P.CUSTOMERS_MANAGE,
       P.SALES_VIEW, P.SALES_CREATE, P.PRESALES_VIEW_ALL,
+      P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE,
     ],
   },
   {
@@ -95,6 +103,7 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
       P.CATALOG_VIEW, P.LOTS_VIEW, P.INVENTORY_VIEW,
       P.CUSTOMERS_VIEW, P.CUSTOMERS_MANAGE,
       P.SALES_VIEW, P.SALES_CREATE, P.PRICE_MODIFY,
+      P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE,
     ],
   },
   {
@@ -106,13 +115,13 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
     ],
   },
   { code: 'DRIVER', name: 'Chofer', permissions: [P.CATALOG_VIEW, P.CUSTOMERS_VIEW, P.SYNC_PUSH] },
-  { code: 'COLLECTOR', name: 'Cobrador', permissions: [P.CUSTOMERS_VIEW, P.SYNC_PUSH] },
+  { code: 'COLLECTOR', name: 'Cobrador', permissions: [P.CUSTOMERS_VIEW, P.SYNC_PUSH, P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE] },
   {
     code: 'ACCOUNTANT',
     name: 'Contador',
     permissions: [
       P.PURCHASES_VIEW, P.SALES_VIEW, P.INVENTORY_VIEW, P.LOTS_VIEW,
-      P.REPORTS_VIEW, P.REPORTS_FINANCIAL, P.AUDIT_VIEW,
+      P.REPORTS_VIEW, P.REPORTS_FINANCIAL, P.AUDIT_VIEW, P.COLLECTIONS_VIEW,
     ],
   },
 ];
