@@ -31,7 +31,8 @@ const routeInclude = {
     include: {
       customer: { select: { id: true, code: true, name: true, phone: true, creditEnabled: true, creditLimit: true, currentDebt: true } },
       address: true,
-      presale: { select: { id: true, presaleNumber: true, totalAmount: true, notes: true, preventista: userRef } },
+      // Precios cotizados por producto: el teléfono del chofer estima con ellos el cobro sin conexión.
+      presale: { select: { id: true, presaleNumber: true, totalAmount: true, notes: true, preventista: userRef, items: { select: { productId: true, unitPrice: true } } } },
       sale: { select: { id: true, saleNumber: true, totalAmount: true, paidAmount: true, creditAmount: true, paymentStatus: true, creditExceptionReason: true } },
       creditAuthorizedBy: userRef,
       recordedBy: userRef,

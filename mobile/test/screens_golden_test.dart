@@ -12,6 +12,10 @@ import 'package:erp_preventa/core/models.dart';
 import 'package:erp_preventa/core/workspace.dart';
 import 'package:erp_preventa/screens/customer_detail_screen.dart';
 import 'package:erp_preventa/screens/customer_form_screen.dart';
+import 'package:erp_preventa/screens/driver/delivery_form_screen.dart';
+import 'package:erp_preventa/screens/driver/driver_home_screen.dart';
+import 'package:erp_preventa/screens/driver/signature_pad.dart';
+import 'package:erp_preventa/screens/driver/stop_screen.dart';
 import 'package:erp_preventa/screens/home_screen.dart';
 import 'package:erp_preventa/screens/presale_detail_screen.dart';
 import 'package:erp_preventa/screens/presale_form_screen.dart';
@@ -85,6 +89,41 @@ Future<AppState> _seed() async {
   return state;
 }
 
+/// Chofer con una ruta en curso: una entrega enviada, una no entregada, una registrada sin señal y una pendiente.
+Future<AppState> _seedDriver() async {
+  final s = await _seed();
+  final db = s.db;
+  StopItem item(String id, String name, double kg, double price, {double? delivered, String? reason}) =>
+      StopItem(productId: id, productName: name, orderedKg: kg, unitPrice: price, deliveredKg: delivered, differenceReason: reason);
+  await db.saveRoute(DeliveryRoute(
+    id: 'r1',
+    number: 'RT-000024',
+    date: '2026-10-07',
+    status: 'IN_PROGRESS',
+    vehiclePlate: '3456-KTR',
+    vehicleDescription: 'Toyota Hilux con furgón térmico',
+    notes: 'Zona norte',
+    stops: [
+      RouteStop(id: 's1', sequence: 1, status: 'DELIVERED', presaleId: 'x1', presaleNumber: 'P-000093', customerId: 'c1', customerName: 'Pollería Doña Juana',
+          address: Address(id: 'a1', label: 'Puesto', address: 'Mercado Central #12', latitude: -17.78, longitude: -63.18), presaleTotal: 437.61,
+          items: [item('p2', 'Pollo entero SOFIA', 25, 17.4, delivered: 25)], receivedByName: 'Juana Pérez', paidAmount: 437.61, paymentMethod: 'QR', saleNumber: 'V-000418', signed: true),
+      RouteStop(id: 's2', sequence: 2, status: 'FAILED', presaleId: 'x5', presaleNumber: 'P-000094', customerId: 'c2', customerName: 'Tienda Don Pedro',
+          address: Address(id: 'a2', label: 'Tienda', address: 'Av. Banzer 4to anillo'), presaleTotal: 202.5, items: [item('p1', 'Pollo entero granja', 12.5, 16.2)],
+          problemType: 'CLOSED', notes: 'Cerrado a las 10:30'),
+      RouteStop(id: 's3', sequence: 3, status: 'PARTIAL', presaleId: 'x6', presaleNumber: 'P-000095', customerId: 'c1', customerName: 'Mercado Abasto · Puesto 112',
+          address: Address(id: 'a3', label: 'Puesto', address: 'Mercado Abasto, nave 2'), presaleTotal: 1088.71,
+          items: [item('p2', 'Pollo entero SOFIA', 40, 17.4, delivered: 38.6, reason: 'Peso real al entregar'), item('p1', 'Pollo entero granja', 24, 16.2, delivered: 24)],
+          receivedByName: 'Rosa Mamani', paidAmount: 0, signed: true, syncState: SyncState.pending),
+      RouteStop(id: 's4', sequence: 4, status: 'PENDING', presaleId: 'x7', presaleNumber: 'P-000098', customerId: 'c1', customerName: 'Pollería Doña Juana',
+          customerPhone: '70812345', address: Address(id: 'a1', label: 'Puesto', address: 'Mercado Central #12', latitude: -17.78, longitude: -63.18), presaleTotal: 566.82,
+          items: [item('p2', 'Pollo entero SOFIA', 20, 17.4), item('p1', 'Pollo entero granja', 14, 16.2)]),
+    ],
+  ));
+  s.user = SessionUser(id: 'u2', username: 'chofer', fullName: 'Chofer Demo', roleName: 'Chofer', permissions: ['deliveries.register', 'sync.push']);
+  await s.reload();
+  return s;
+}
+
 Widget _app(AppState s, Widget home) => ChangeNotifierProvider.value(
       value: s,
       child: MaterialApp(
@@ -101,12 +140,12 @@ void main() {
     await _loadFonts();
   });
 
-  Future<void> shot(WidgetTester tester, String name, Widget Function(AppState) build, {Future<void> Function(WidgetTester)? act}) async {
+  Future<void> shot(WidgetTester tester, String name, Widget Function(AppState) build, {Future<void> Function(WidgetTester)? act, bool driver = false}) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     late AppState s;
-    await tester.runAsync(() async => s = await _seed());
+    await tester.runAsync(() async => s = driver ? await _seedDriver() : await _seed());
     await tester.pumpWidget(_app(s, build(s)));
     await tester.pumpAndSettle();
     if (act != null) await act(tester);
@@ -136,4 +175,27 @@ void main() {
   testWidgets('ficha de cliente', (t) => shot(t, 'ficha_cliente', (_) => const CustomerDetailScreen(customerId: 'c1')));
   testWidgets('editar pedido', (t) => shot(t, 'editar_pedido', (s) => PresaleFormScreen(editing: s.presales.firstWhere((p) => p.id == 'x2'))));
   testWidgets('nuevo cliente', (t) => shot(t, 'nuevo_cliente', (_) => const CustomerFormScreen()));
+
+  // Chofer
+  testWidgets('chofer: ruta del día', (t) => shot(t, 'chofer_ruta', (_) => const DriverHomeScreen(), driver: true));
+  testWidgets('chofer: parada pendiente', (t) => shot(t, 'chofer_parada', (_) => const StopScreen(routeId: 'r1', stopId: 's4'), driver: true));
+  testWidgets('chofer: entrega con diferencia y firma', (t) => shot(t, 'chofer_entrega', (_) => const DeliveryFormScreen(routeId: 'r1', stopId: 's4'), driver: true,
+      act: (t) async {
+        await t.enterText(find.byType(TextField).first, '19,4');
+        await t.pumpAndSettle();
+        await t.tap(find.text('Peso real al entregar'));
+        await t.pumpAndSettle();
+        await t.tap(find.text('Crédito'));
+        await t.pumpAndSettle();
+        await t.enterText(find.widgetWithText(TextField, 'Quién recibe'), 'Juana Pérez');
+        await t.ensureVisible(find.byType(SignaturePad));
+        await t.pumpAndSettle();
+        final pad = t.getTopLeft(find.byType(SignaturePad));
+        final g = await t.startGesture(pad + const Offset(30, 110));
+        for (var i = 1; i <= 24; i++) {
+          await g.moveTo(pad + Offset(30.0 + i * 11, 110.0 - 40.0 * (i.isEven ? 1.0 : 0.2) + i));
+        }
+        await g.up();
+        await t.pumpAndSettle();
+      }));
 }

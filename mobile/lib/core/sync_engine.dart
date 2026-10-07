@@ -76,10 +76,22 @@ class SyncEngine {
       case 'PRESALE_UPDATE':
         final p = await db.presale(op.payload['presaleId'] as String);
         if (p != null) await db.savePresale(p.copyWith(syncState: SyncState.synced, clearError: true));
+      case 'DELIVERY_COMPLETE' || 'DELIVERY_FAIL':
+        await _updateStop(op.payload['stopId'] as String, (s) => s.copyWith(saleNumber: reference, syncState: SyncState.synced, clearError: true));
     }
   }
 
+  Future<void> _updateStop(String stopId, RouteStop Function(RouteStop) change) async {
+    final route = await db.routeOfStop(stopId);
+    if (route == null) return;
+    await db.saveRoute(route.withStop(change(route.stops.firstWhere((s) => s.id == stopId))));
+  }
+
   Future<void> _applyFailure(OutboxOp op, String error) async {
+    if (op.type == 'DELIVERY_COMPLETE' || op.type == 'DELIVERY_FAIL') {
+      await _updateStop(op.payload['stopId'] as String, (s) => s.copyWith(syncState: SyncState.error, error: error));
+      return;
+    }
     final presaleId = switch (op.type) {
       'PRESALE_CREATE' => op.payload['id'] as String?,
       'PRESALE_CANCEL' || 'PRESALE_UPDATE' => op.payload['presaleId'] as String?,
@@ -105,6 +117,15 @@ class SyncEngine {
       for (final o in pendingOps)
         if (o.type == 'PRESALE_CREATE') o.payload['id'] as String else if (o.type == 'PRESALE_CANCEL' || o.type == 'PRESALE_UPDATE') o.payload['presaleId'] as String,
     };
+    // Chofer: rutas asignadas (las paradas registradas sin enviar se conservan como están en el teléfono).
+    final waitingStops = <String>{
+      for (final o in pendingOps)
+        if (o.type == 'DELIVERY_COMPLETE' || o.type == 'DELIVERY_FAIL') o.payload['stopId'] as String,
+    };
+    await db.replaceRoutes(
+      (data['routes'] as List? ?? []).map((j) => DeliveryRoute.fromServer(Map<String, dynamic>.from(j as Map))).toList(),
+      waitingStops,
+    );
     for (final raw in (data['presales'] as List)) {
       final j = Map<String, dynamic>.from(raw as Map);
       if (waiting.contains(j['id'])) continue; // el teléfono tiene un cambio sin enviar: no se pisa

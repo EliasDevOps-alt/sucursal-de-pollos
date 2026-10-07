@@ -529,8 +529,9 @@ export class SalesService {
 
     if (credit.gt(0)) {
       if (!customer) throw new BadRequestException('Una venta rápida (sin cliente) debe pagarse completa');
-      if (!customer.creditEnabled) throw new BadRequestException(`El cliente ${customer.name} no tiene crédito habilitado`);
-      const available = D(customer.creditLimit).minus(customer.currentDebt);
+      // En una entrega (capPaid) la mercadería ya se entregó: lo que falte pagar queda como deuda marcada para revisión.
+      if (!customer.creditEnabled && !capPaid) throw new BadRequestException(`El cliente ${customer.name} no tiene crédito habilitado`);
+      const available = customer.creditEnabled ? D(customer.creditLimit).minus(customer.currentDebt) : ZERO;
       if (credit.gt(available)) {
         issues.push({
           type: 'CREDIT_LIMIT',

@@ -4,9 +4,9 @@ Duración sugerida: **30 minutos** de demo + 15 de preguntas. La idea fuerza: *e
 
 ## Preparación (el día anterior)
 
-- [ ] Datos frescos que terminan "hoy": `cd backend && npm run demo:data -- --reset` (unos 2 minutos).
+- [ ] Datos frescos que terminan "hoy": `cd backend && npm run demo:data -- --reset` (unos 4 minutos).
 - [ ] Backend (`npm run start:dev`) y panel (`npm run dev -- --host`) encendidos. Ver [despliegue.md](despliegue.md), opción A o C.
-- [ ] Teléfono Android con el APK instalado, en la misma Wi-Fi, con el servidor configurado e ingresado como `preventista` / `Demo123!`. Hacer **una preventa de prueba** para confirmar que sincroniza.
+- [ ] Teléfono Android con el APK instalado, en la misma Wi-Fi, con el servidor configurado e ingresado como `preventista` / `Demo123!`. Hacer **una preventa de prueba** para confirmar que sincroniza. Para el reparto, cerrar sesión e ingresar como `chofer` / `Demo123!` (o usar un segundo teléfono).
 - [ ] Dos ventanas del navegador: una normal con `admin` / `Admin123!` y una de incógnito con `vcentral` / `Demo123!`.
 - [ ] Proyector o pantalla compartida probados; tener a mano el teléfono para mostrarlo a cámara o pasarlo.
 - [ ] Plan B sin internet: la opción A funciona en una red local sin salida a internet (un router propio o el punto de acceso del teléfono).
@@ -57,6 +57,18 @@ Duración sugerida: **30 minutos** de demo + 15 de preguntas. La idea fuerza: *e
 6. **Atender pedido** → se abre la venta con cliente y productos cargados; los lotes salen por FEFO. Confirmar. En el teléfono, al sincronizar, el pedido figura **"Atendido · V-…"**.
 
 **Si preguntan por duplicados:** "Cada operación del teléfono tiene un identificador único. Si la señal se corta justo cuando el servidor respondía y el teléfono reenvía, el servidor reconoce la operación y no la vuelve a registrar." (Esto está cubierto por pruebas automáticas.)
+
+## 4b. Reparto: ruta, entrega con firma y liquidación (7 min) — `admin` + teléfono con `chofer`
+
+Los datos de demostración dejan una ruta **en curso** de hoy, con la mitad de las paradas entregadas, y pedidos pendientes para armar otra.
+
+1. **Logística → Rutas**: la ruta de hoy, *En ruta*. Abrirla: mapa con las paradas numeradas por estado y el recorrido GPS del chofer; **carga por producto** (pedido, cargado, entregado, a bordo).
+2. **Ver entrega** en una parada entregada: lo pedido vs. lo entregado (con el motivo de la diferencia), lo cobrado y la **firma** de quien recibió.
+3. En el teléfono, ingresar con **`chofer` / `Demo123!`**: la app abre en modo **Mis entregas** con la misma ruta. Activar **modo avión**.
+4. Tocar una parada pendiente → **Navegar** / **Llamar** → **Entregar**: corregir un peso (pide el motivo), elegir el pago, nombre de quien recibe y **firmar con el dedo** → queda *sin enviar*.
+5. Quitar el modo avión → la parada pasa a *Entregado* con su número de venta. En el panel (se refresca solo) aparece la entrega con la firma.
+6. **Liquidar ruta**: el sistema dice cuánto debería volver de cada lote; se registra lo pesado y lo que falte queda como pérdida. El vehículo queda vacío.
+7. Opcional: **Nueva ruta** con los pedidos pendientes, vehículo y chofer; la barra de capacidad muestra kg y canastillos; **Hoja de carga** para imprimir; **Despachar**.
 
 ## 5. Reportes y trazabilidad (5 min) — `admin`
 

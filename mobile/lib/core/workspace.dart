@@ -213,9 +213,92 @@ class Workspace {
         },
       ));
 
+  // ── Chofer ──────────────────────────────────────────────
+
+  /// Registra la entrega en el teléfono y la encola. El servidor genera la venta al sincronizar.
+  Future<RouteStop> deliverStop(
+    RouteStop stop, {
+    required List<StopItem> items,
+    required double paidAmount,
+    String? paymentMethod,
+    required String receivedByName,
+    String? signaturePng,
+    String? notes,
+    GeoPoint? location,
+  }) async {
+    final route = await db.routeOfStop(stop.id);
+    if (route == null || !route.inProgress) throw StateError('La ruta no está en curso');
+    final differs = items.any((i) => (i.deliveredKg ?? 0) != i.orderedKg);
+    final updated = stop.copyWith(
+      status: differs ? 'PARTIAL' : 'DELIVERED',
+      items: items,
+      receivedByName: receivedByName.trim(),
+      paidAmount: paidAmount,
+      paymentMethod: paidAmount > 0 ? paymentMethod : null,
+      notes: _blankToNull(notes),
+      signed: signaturePng != null,
+      syncState: SyncState.pending,
+      clearError: true,
+    );
+    await db.saveRoute(route.withStop(updated));
+    if (location != null) await recordPosition(location, 'DELIVERY', referenceId: stop.id);
+    await db.enqueue(OutboxOp(
+      id: _uuid.v4(),
+      type: 'DELIVERY_COMPLETE',
+      createdAt: DateTime.now(),
+      payload: {
+        'stopId': stop.id,
+        'items': [
+          for (final i in items)
+            {
+              'productId': i.productId,
+              'deliveredWeightKg': i.deliveredKg ?? 0,
+              if (i.differenceReason != null && i.differenceReason!.trim().isNotEmpty) 'differenceReason': i.differenceReason!.trim(),
+            },
+        ],
+        'paidAmount': double.parse(paidAmount.toStringAsFixed(2)),
+        if (paidAmount > 0 && paymentMethod != null) 'paymentMethod': paymentMethod,
+        'receivedByName': receivedByName.trim(),
+        if (signaturePng != null) 'signature': signaturePng,
+        if (_blankToNull(notes) != null) 'notes': notes!.trim(),
+        if (location != null) 'latitude': location.latitude,
+        if (location != null) 'longitude': location.longitude,
+      },
+    ));
+    return updated;
+  }
+
+  /// No se pudo entregar: queda el motivo (el pedido vuelve a pendiente en el servidor).
+  Future<RouteStop> failStop(RouteStop stop, {required String problemType, String? notes, GeoPoint? location}) async {
+    final route = await db.routeOfStop(stop.id);
+    if (route == null || !route.inProgress) throw StateError('La ruta no está en curso');
+    final updated = stop.copyWith(status: 'FAILED', problemType: problemType, notes: _blankToNull(notes), syncState: SyncState.pending, clearError: true);
+    await db.saveRoute(route.withStop(updated));
+    if (location != null) await recordPosition(location, 'DELIVERY_FAIL', referenceId: stop.id);
+    await db.enqueue(OutboxOp(
+      id: _uuid.v4(),
+      type: 'DELIVERY_FAIL',
+      createdAt: DateTime.now(),
+      payload: {
+        'stopId': stop.id,
+        'problemType': problemType,
+        if (_blankToNull(notes) != null) 'notes': notes!.trim(),
+        if (location != null) 'latitude': location.latitude,
+        if (location != null) 'longitude': location.longitude,
+      },
+    ));
+    return updated;
+  }
+
   /// Descarta una operación que el servidor rechazó (queda la decisión al usuario).
   Future<void> discard(OutboxOp op) async {
     await db.removeOp(op.id);
+    if (op.type == 'DELIVERY_COMPLETE' || op.type == 'DELIVERY_FAIL') {
+      // La parada vuelve a pendiente en el teléfono para registrarla de nuevo.
+      final stopId = op.payload['stopId'] as String;
+      final route = await db.routeOfStop(stopId);
+      if (route != null) await db.saveRoute(route.withStop(route.stops.firstWhere((s) => s.id == stopId).copyWith(status: 'PENDING', syncState: SyncState.synced, reset: true)));
+    }
     if (op.type == 'PRESALE_CREATE') await db.deletePresale(op.payload['id'] as String);
     if (op.type == 'PRESALE_CANCEL') {
       final p = await db.presale(op.payload['presaleId'] as String);

@@ -24,3 +24,6 @@ backups/
 
 # Compilación aparte para pruebas de punta a punta (servidor en otro puerto)
 .dist-test/
+
+# Diferencias de pruebas de capturas (se generan al fallar una comparación)
+mobile/test/failures/

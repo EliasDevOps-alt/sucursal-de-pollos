@@ -17,7 +17,7 @@ import '../core/workspace.dart';
 /// Sin ese parámetro apunta al emulador de Android (que ve la PC como 10.0.2.2).
 /// En la pantalla de ingreso, "Servidor" permite cambiarla.
 const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3000/api');
-const appVersion = '0.1.0';
+const appVersion = '0.2.0';
 
 class AppState extends ChangeNotifier {
   AppState({required this.db, LocationService? location}) : location = location ?? LocationService();
@@ -37,6 +37,7 @@ class AppState extends ChangeNotifier {
   List<Map<String, String>> customerTypes = [];
   List<Presale> presales = [];
   List<OutboxOp> outbox = [];
+  List<DeliveryRoute> routes = [];
 
   bool online = true;
   bool syncing = false;
@@ -50,6 +51,9 @@ class AppState extends ChangeNotifier {
   int get pendingCount => outbox.where((o) => o.type != 'GPS_POSITION').length;
   int get rejectedCount => outbox.where((o) => o.state != 'pending').length;
   bool get loggedIn => user != null;
+  bool get isDriver => user?.isDriver ?? false;
+  /// Ruta en curso del chofer (la que se está repartiendo).
+  DeliveryRoute? get activeRoute => routes.where((r) => r.inProgress).firstOrNull;
 
   Future<void> init() async {
     apiUrl = await db.getValue('apiUrl') ?? defaultApiUrl;
@@ -77,6 +81,7 @@ class AppState extends ChangeNotifier {
     customerTypes = await db.customerTypes();
     presales = await db.presales();
     outbox = await db.outbox();
+    routes = await db.routes();
     notifyListeners();
   }
 
@@ -86,8 +91,8 @@ class AppState extends ChangeNotifier {
     api = ApiClient(baseUrl: apiUrl);
     final res = await api.login(username.trim(), password);
     final u = SessionUser.fromJson(Map<String, dynamic>.from(res['user'] as Map));
-    if (!u.permissions.contains('presales.create')) {
-      throw ApiException(403, 'Este usuario no tiene permiso de preventa');
+    if (!u.permissions.contains('presales.create') && !u.permissions.contains('deliveries.register')) {
+      throw ApiException(403, 'Este usuario no es preventista ni chofer');
     }
     // Otro usuario en el mismo teléfono: se limpia lo anterior solo si no quedó nada sin enviar.
     final previous = await db.getValue('user');
@@ -155,8 +160,10 @@ class AppState extends ChangeNotifier {
       }
     });
     _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) => sync());
-    // GPS periódico (~10 min) mientras la app está abierta; no es rastreo vehicular.
-    _gpsTimer = Timer.periodic(const Duration(minutes: 10), (_) async {
+    // GPS periódico mientras la app está abierta: cada ~10 min el preventista; cada ~3 min el chofer
+    // con una ruta en curso (seguimiento del reparto). No se registra fuera de la ruta.
+    _gpsTimer = Timer.periodic(Duration(minutes: isDriver ? 3 : 10), (_) async {
+      if (user == null || (isDriver && activeRoute == null)) return;
       final p = await location.current(timeout: const Duration(seconds: 15));
       if (p != null && user != null) {
         await workspace.recordPosition(p, 'PERIODIC');
@@ -227,6 +234,30 @@ class AppState extends ChangeNotifier {
     await workspace.cancelPresale(p, reason);
     await reload();
     unawaited(sync());
+  }
+
+  Future<RouteStop> deliverStop(
+    RouteStop stop, {
+    required List<StopItem> items,
+    required double paidAmount,
+    String? paymentMethod,
+    required String receivedByName,
+    String? signaturePng,
+    String? notes,
+    GeoPoint? location,
+  }) async {
+    final r = await workspace.deliverStop(stop,
+        items: items, paidAmount: paidAmount, paymentMethod: paymentMethod, receivedByName: receivedByName, signaturePng: signaturePng, notes: notes, location: location);
+    await reload();
+    unawaited(sync());
+    return r;
+  }
+
+  Future<RouteStop> failStop(RouteStop stop, {required String problemType, String? notes, GeoPoint? location}) async {
+    final r = await workspace.failStop(stop, problemType: problemType, notes: notes, location: location);
+    await reload();
+    unawaited(sync());
+    return r;
   }
 
   Future<void> discard(OutboxOp op) async {

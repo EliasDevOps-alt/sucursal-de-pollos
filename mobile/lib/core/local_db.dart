@@ -17,8 +17,13 @@ class LocalDb {
     final db = await f.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
+        onUpgrade: (db, oldVersion, _) async {
+          // v2: rutas de entrega del chofer.
+          if (oldVersion < 2) await db.execute('CREATE TABLE routes (id TEXT PRIMARY KEY, route_date TEXT, json TEXT)');
+        },
         onCreate: (db, _) async {
+          await db.execute('CREATE TABLE routes (id TEXT PRIMARY KEY, route_date TEXT, json TEXT)');
           await db.execute('CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT)');
           await db.execute('CREATE TABLE products (id TEXT PRIMARY KEY, name TEXT, json TEXT)');
           await db.execute('CREATE TABLE customers (id TEXT PRIMARY KEY, name TEXT, json TEXT)');
@@ -106,6 +111,39 @@ class LocalDb {
 
   Future<void> deletePresale(String id) => _db.delete('presales', where: 'id = ?', whereArgs: [id]);
 
+  // ── Rutas del chofer ────────────────────────────────────
+  Future<List<DeliveryRoute>> routes() async => (await _db.query('routes', orderBy: 'route_date'))
+      .map((r) => DeliveryRoute.fromJson(jsonDecode(r['json'] as String) as Map<String, dynamic>))
+      .toList();
+
+  Future<DeliveryRoute?> route(String id) async {
+    final rows = await _db.query('routes', where: 'id = ?', whereArgs: [id]);
+    return rows.isEmpty ? null : DeliveryRoute.fromJson(jsonDecode(rows.first['json'] as String) as Map<String, dynamic>);
+  }
+
+  /// Ruta que contiene la parada.
+  Future<DeliveryRoute?> routeOfStop(String stopId) async => (await routes()).where((r) => r.stops.any((s) => s.id == stopId)).firstOrNull;
+
+  Future<void> saveRoute(DeliveryRoute r) =>
+      _db.insert('routes', {'id': r.id, 'route_date': r.date, 'json': jsonEncode(r.toJson())}, conflictAlgorithm: ConflictAlgorithm.replace);
+
+  /// Reemplaza las rutas con las del servidor, salvo las paradas que el teléfono registró y aún no envió.
+  Future<void> replaceRoutes(List<DeliveryRoute> fromServer, Set<String> waitingStopIds) async {
+    final local = {for (final r in await routes()) r.id: r};
+    await _db.transaction((tx) async {
+      await tx.delete('routes');
+      for (var r in fromServer) {
+        final mine = local[r.id];
+        if (mine != null) {
+          for (final s in mine.stops.where((s) => waitingStopIds.contains(s.id))) {
+            r = r.withStop(s);
+          }
+        }
+        await tx.insert('routes', {'id': r.id, 'route_date': r.date, 'json': jsonEncode(r.toJson())});
+      }
+    });
+  }
+
   // ── Cola de salida ──────────────────────────────────────
   Future<void> enqueue(OutboxOp op) => _db.insert('outbox', {
         'id': op.id,
@@ -147,7 +185,7 @@ class LocalDb {
 
   /// Borra todo (al cerrar sesión, solo si no quedan operaciones sin enviar).
   Future<void> clearAll() async {
-    for (final t in ['products', 'customers', 'customer_types', 'presales', 'outbox']) {
+    for (final t in ['products', 'customers', 'customer_types', 'presales', 'routes', 'outbox']) {
       await _db.delete(t);
     }
   }

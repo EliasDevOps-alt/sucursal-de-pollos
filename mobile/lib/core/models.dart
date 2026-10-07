@@ -327,6 +327,8 @@ class OutboxOp {
         'CUSTOMER_ADDRESS_ADD' => 'Dirección adicional: ${payload['label'] ?? ''}',
         'VISIT_CREATE' => 'Visita',
         'GPS_POSITION' => 'Posición GPS',
+        'DELIVERY_COMPLETE' => 'Entrega registrada',
+        'DELIVERY_FAIL' => 'Entrega no realizada',
         _ => type,
       };
 }
@@ -340,6 +342,9 @@ class SessionUser {
   final String roleName;
   final List<String> permissions;
 
+  /// Chofer: registra entregas de sus rutas (la app muestra el modo de entregas en lugar del de preventa).
+  bool get isDriver => permissions.contains('deliveries.register') && !permissions.contains('presales.create');
+
   factory SessionUser.fromJson(Map<String, dynamic> j) => SessionUser(
         id: j['id'] as String,
         username: j['username'] as String,
@@ -349,4 +354,282 @@ class SessionUser {
       );
 
   Map<String, dynamic> toJson() => {'id': id, 'username': username, 'fullName': fullName, 'roleName': roleName, 'permissions': permissions};
+}
+
+// ── Chofer: rutas de entrega ─────────────────────────────
+
+class StopItem {
+  StopItem({required this.productId, required this.productName, required this.orderedKg, required this.unitPrice, this.deliveredKg, this.differenceReason});
+
+  final String productId;
+  final String productName;
+  final double orderedKg;
+  final double unitPrice; // precio cotizado en la preventa (para estimar el cobro sin conexión)
+  final double? deliveredKg;
+  final String? differenceReason;
+
+  factory StopItem.fromJson(Map<String, dynamic> j) => StopItem(
+        productId: j['productId'] as String,
+        productName: j['productName'] as String,
+        orderedKg: toDouble(j['orderedKg']),
+        unitPrice: toDouble(j['unitPrice']),
+        deliveredKg: toDoubleOrNull(j['deliveredKg']),
+        differenceReason: j['differenceReason'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'productId': productId,
+        'productName': productName,
+        'orderedKg': orderedKg,
+        'unitPrice': unitPrice,
+        'deliveredKg': deliveredKg,
+        'differenceReason': differenceReason,
+      };
+}
+
+class RouteStop {
+  RouteStop({
+    required this.id,
+    required this.sequence,
+    required this.status,
+    required this.presaleId,
+    required this.presaleNumber,
+    required this.customerId,
+    required this.customerName,
+    required this.presaleTotal,
+    required this.items,
+    this.customerPhone,
+    this.address,
+    this.receivedByName,
+    this.paidAmount = 0,
+    this.paymentMethod,
+    this.problemType,
+    this.notes,
+    this.saleNumber,
+    this.signed = false,
+    this.syncState = SyncState.synced,
+    this.error,
+  });
+
+  final String id;
+  final int sequence;
+  final String status; // PENDING | DELIVERED | PARTIAL | FAILED
+  final String presaleId;
+  final String presaleNumber;
+  final String customerId;
+  final String customerName;
+  final String? customerPhone;
+  final Address? address;
+  final double presaleTotal;
+  final List<StopItem> items;
+  final String? receivedByName;
+  final double paidAmount;
+  final String? paymentMethod;
+  final String? problemType;
+  final String? notes;
+  final String? saleNumber;
+  final bool signed;
+  final SyncState syncState;
+  final String? error;
+
+  bool get isPending => status == 'PENDING';
+  double get orderedKg => items.fold(0, (t, i) => t + i.orderedKg);
+
+  /// Desde la respuesta del servidor (bootstrap).
+  factory RouteStop.fromServer(Map<String, dynamic> j) {
+    final presale = Map<String, dynamic>.from(j['presale'] as Map);
+    final prices = {for (final i in (presale['items'] as List? ?? [])) (i as Map)['productId'] as String: toDouble(i['unitPrice'])};
+    final customer = Map<String, dynamic>.from(j['customer'] as Map);
+    return RouteStop(
+      id: j['id'] as String,
+      sequence: (j['sequence'] as num).toInt(),
+      status: j['status'] as String,
+      presaleId: j['presaleId'] as String,
+      presaleNumber: presale['presaleNumber'] as String,
+      customerId: customer['id'] as String,
+      customerName: customer['name'] as String,
+      customerPhone: customer['phone'] as String?,
+      address: j['address'] == null ? null : Address.fromJson(Map<String, dynamic>.from(j['address'] as Map)),
+      presaleTotal: toDouble(presale['totalAmount']),
+      items: (j['items'] as List).map((raw) {
+        final i = Map<String, dynamic>.from(raw as Map);
+        final product = Map<String, dynamic>.from(i['product'] as Map);
+        return StopItem(
+          productId: product['id'] as String,
+          productName: product['name'] as String,
+          orderedKg: toDouble(i['orderedWeightKg']),
+          unitPrice: prices[product['id']] ?? 0,
+          deliveredKg: toDoubleOrNull(i['deliveredWeightKg']),
+          differenceReason: i['differenceReason'] as String?,
+        );
+      }).toList(),
+      receivedByName: j['receivedByName'] as String?,
+      paidAmount: toDouble(j['paidAmount']),
+      paymentMethod: j['paymentMethod'] as String?,
+      problemType: j['problemType'] as String?,
+      notes: j['notes'] as String?,
+      saleNumber: j['sale'] == null ? null : (j['sale'] as Map)['saleNumber'] as String?,
+      signed: j['signed'] == true,
+    );
+  }
+
+  factory RouteStop.fromJson(Map<String, dynamic> j) => RouteStop(
+        id: j['id'] as String,
+        sequence: (j['sequence'] as num).toInt(),
+        status: j['status'] as String,
+        presaleId: j['presaleId'] as String,
+        presaleNumber: j['presaleNumber'] as String,
+        customerId: j['customerId'] as String,
+        customerName: j['customerName'] as String,
+        customerPhone: j['customerPhone'] as String?,
+        address: j['address'] == null ? null : Address.fromJson(Map<String, dynamic>.from(j['address'] as Map)),
+        presaleTotal: toDouble(j['presaleTotal']),
+        items: (j['items'] as List).map((i) => StopItem.fromJson(Map<String, dynamic>.from(i as Map))).toList(),
+        receivedByName: j['receivedByName'] as String?,
+        paidAmount: toDouble(j['paidAmount']),
+        paymentMethod: j['paymentMethod'] as String?,
+        problemType: j['problemType'] as String?,
+        notes: j['notes'] as String?,
+        saleNumber: j['saleNumber'] as String?,
+        signed: j['signed'] == true,
+        syncState: SyncState.values.byName((j['syncState'] ?? 'synced') as String),
+        error: j['error'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'sequence': sequence,
+        'status': status,
+        'presaleId': presaleId,
+        'presaleNumber': presaleNumber,
+        'customerId': customerId,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
+        'address': address?.toJson(),
+        'presaleTotal': presaleTotal,
+        'items': items.map((i) => i.toJson()).toList(),
+        'receivedByName': receivedByName,
+        'paidAmount': paidAmount,
+        'paymentMethod': paymentMethod,
+        'problemType': problemType,
+        'notes': notes,
+        'saleNumber': saleNumber,
+        'signed': signed,
+        'syncState': syncState.name,
+        'error': error,
+      };
+
+  /// `reset` vuelve la parada a pendiente (al descartar una entrega rechazada).
+  RouteStop copyWith({
+    String? status,
+    List<StopItem>? items,
+    String? receivedByName,
+    double? paidAmount,
+    String? paymentMethod,
+    String? problemType,
+    String? notes,
+    String? saleNumber,
+    bool? signed,
+    SyncState? syncState,
+    String? error,
+    bool clearError = false,
+    bool reset = false,
+  }) =>
+      RouteStop(
+        id: id,
+        sequence: sequence,
+        status: status ?? this.status,
+        presaleId: presaleId,
+        presaleNumber: presaleNumber,
+        customerId: customerId,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        address: address,
+        presaleTotal: presaleTotal,
+        items: reset ? [for (final i in this.items) StopItem(productId: i.productId, productName: i.productName, orderedKg: i.orderedKg, unitPrice: i.unitPrice)] : items ?? this.items,
+        receivedByName: reset ? null : receivedByName ?? this.receivedByName,
+        paidAmount: reset ? 0 : paidAmount ?? this.paidAmount,
+        paymentMethod: reset ? null : paymentMethod ?? this.paymentMethod,
+        problemType: reset ? null : problemType ?? this.problemType,
+        notes: reset ? null : notes ?? this.notes,
+        saleNumber: reset ? null : saleNumber ?? this.saleNumber,
+        signed: reset ? false : signed ?? this.signed,
+        syncState: syncState ?? this.syncState,
+        error: clearError || reset ? null : (error ?? this.error),
+      );
+}
+
+class DeliveryRoute {
+  DeliveryRoute({
+    required this.id,
+    required this.number,
+    required this.date,
+    required this.status,
+    required this.vehiclePlate,
+    required this.vehicleDescription,
+    required this.stops,
+    this.notes,
+  });
+
+  final String id;
+  final String number;
+  final String date; // AAAA-MM-DD
+  final String status; // PLANNED | IN_PROGRESS | COMPLETED
+  final String vehiclePlate;
+  final String vehicleDescription;
+  final String? notes;
+  final List<RouteStop> stops;
+
+  bool get inProgress => status == 'IN_PROGRESS';
+  int get resolved => stops.where((s) => !s.isPending).length;
+  double get collected => stops.fold(0, (t, s) => t + s.paidAmount);
+
+  factory DeliveryRoute.fromServer(Map<String, dynamic> j) {
+    final vehicle = Map<String, dynamic>.from(j['vehicle'] as Map);
+    final stops = (j['stops'] as List).map((s) => RouteStop.fromServer(Map<String, dynamic>.from(s as Map))).toList()
+      ..sort((a, b) => a.sequence.compareTo(b.sequence));
+    return DeliveryRoute(
+      id: j['id'] as String,
+      number: j['routeNumber'] as String,
+      date: (j['routeDate'] as String).substring(0, 10),
+      status: j['status'] as String,
+      vehiclePlate: vehicle['plate'] as String,
+      vehicleDescription: vehicle['description'] as String,
+      notes: j['notes'] as String?,
+      stops: stops,
+    );
+  }
+
+  factory DeliveryRoute.fromJson(Map<String, dynamic> j) => DeliveryRoute(
+        id: j['id'] as String,
+        number: j['number'] as String,
+        date: j['date'] as String,
+        status: j['status'] as String,
+        vehiclePlate: j['vehiclePlate'] as String,
+        vehicleDescription: j['vehicleDescription'] as String,
+        notes: j['notes'] as String?,
+        stops: (j['stops'] as List).map((s) => RouteStop.fromJson(Map<String, dynamic>.from(s as Map))).toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'number': number,
+        'date': date,
+        'status': status,
+        'vehiclePlate': vehiclePlate,
+        'vehicleDescription': vehicleDescription,
+        'notes': notes,
+        'stops': stops.map((s) => s.toJson()).toList(),
+      };
+
+  DeliveryRoute withStop(RouteStop stop) => DeliveryRoute(
+        id: id,
+        number: number,
+        date: date,
+        status: status,
+        vehiclePlate: vehiclePlate,
+        vehicleDescription: vehicleDescription,
+        notes: notes,
+        stops: [for (final s in stops) s.id == stop.id ? stop : s],
+      );
 }

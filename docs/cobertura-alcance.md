@@ -12,7 +12,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 | 6.2 Inventario y almacenes | ✅ 10 de 10 | Transferencias con peso recibido, ajustes por conteo, bajas y kardex completo |
 | 6.3 Ventas | 🟡 9 de 11 | Faltan recibos imprimibles, venta por canastillo e impresión térmica |
 | 6.4 Preventas | ✅ 8 de 8 | Incluye edición de pedidos, direcciones adicionales, visitas y mapa de recorrido |
-| 6.5 Logística y distribución | ❌ 0 de 12 | Módulo completo pendiente (incluye la app del chofer) |
+| 6.5 Logística y distribución | 🟡 10 de 12 | Vehículos, rutas, hoja de carga, entregas offline con firma y GPS sí; faltan impresión térmica y reimpresión del recibo (fase L) |
 | 6.6 Cobranza y crédito | 🟡 6 de 10 | Cobros y anticipos en la web sí; faltan la app del cobrador, mapa, recibos y rendición |
 | 6.7 Canastillos | ❌ 0 de 7 | Módulo completo pendiente |
 | 6.8 Finanzas operativas | 🟡 1 de 11 | Solo rentabilidad; falta caja, ingresos/egresos, rendiciones y cierres |
@@ -68,14 +68,14 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Trabajo offline y sincronización idempotente
 - ✅ Trayectoria GPS: posiciones por evento y cada ~10 min, visitas con resultado (con pedido, sin pedido, cerrado, responsable ausente) y página web **Recorrido** con mapa (OpenStreetMap), trayectoria, pedidos, visitas y línea de tiempo por preventista y día
 
-### 6.5 Logística y distribución — pendiente completo
-- ❌ Vehículos propios y subcontratados, capacidad en kg y canastillos
-- ❌ Asignación manual de pedidos, vehículos y choferes; organización de rutas (ruta fija al iniciar)
-- ❌ Hoja de carga/despacho
-- ❌ Seguimiento GPS del chofer
-- ❌ Entregas, diferencias con motivo obligatorio, reporte de problemas
-- ❌ Firma digital, recibo digital, impresión térmica, consulta y reimpresión
-- ❌ App del chofer (offline)
+### 6.5 Logística y distribución
+- ✅ Vehículos propios y subcontratados, con capacidad en kg y canastillos (cada uno con su almacén móvil)
+- ✅ Asignación manual de pedidos, vehículo y chofer; orden de visita; control de capacidad; la ruta queda fija al despachar
+- ✅ Hoja de carga/despacho imprimible; la carga se transfiere al vehículo y el sobrante vuelve pesado al liquidar
+- ✅ Seguimiento GPS del chofer (cada ~3 min con la ruta en curso) y mapa de la ruta con paradas por estado
+- ✅ Entregas con peso real y motivo obligatorio de cada diferencia; no entregas con motivo (cerrado, rechazo, sin dinero…); el pedido no entregado vuelve a pendiente
+- ✅ Firma digital y comprobante digital de la entrega (web); ❌ impresión térmica y reimpresión (fase L)
+- ✅ App del chofer offline: misma app con modo de entregas según el rol, cola idempotente, navegación y llamada al cliente
 
 ### 6.6 Cobranza y crédito
 - ✅ Deuda acumulada por cliente (con historial de movimientos)
@@ -99,7 +99,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 
 ### 6.9 Dashboard y reportes
 - ✅ Dashboard general; ventas, stock y cuentas por cobrar
-- ❌ Dinero (caja), entregas y rutas activas, sucursales y vehículos, canastillos pendientes, diferencias de caja y problemas de entrega
+- 🟡 Rutas activas, entregas y problemas de entrega en Logística (no en el tablero); ❌ dinero (caja), canastillos pendientes y diferencias de caja
 - ✅ Lotes próximos a vencer y alertas de bajo stock
 - ✅ Reportes de ventas, inventario, merma, rentabilidad (por producto, lote, cliente y vendedor) y cobranza (antigüedad)
 - 🟡 Compras y clientes: listados, sin reporte dedicado
@@ -111,18 +111,18 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ 7.1 Lotes, merma y costos: todas (incluye forzar lote con autorización, usuario, fecha y motivo)
 - ✅ 7.2 Precios: por lote, central vs. sucursal (por API), permiso de modificación, precio original y final auditados. 🟡 La pantalla de precios solo edita el precio central
 - 🟡 7.3 Clientes: rangos, descuentos, límites, aprobación de cambio de rango, excepciones, tipos de cliente y cobros sí; sugerencia automática de ascenso no
-- ❌ 7.4 Entregas y rutas
+- ✅ 7.4 Entregas y rutas: ruta fija al despachar, diferencias y problemas con motivo obligatorio, firma, cobro registrado por el chofer, excesos de crédito marcados para revisión
 - ❌ 7.5 Canastillos
 - ✅ 7.6 Anulaciones (sin borrado, con usuario, fecha y motivo) y devoluciones autorizadas
 
 ### 8–10. Roles, seguridad y offline
 - ✅ Administrador, Vendedor Central y Preventista operativos
 - ✅ Vendedor Sucursal (recibe transferencias y vende); 🟡 Contador (reportes sí, caja no)
-- ❌ Chofer y Cobrador (roles creados, sin app ni funciones)
+- ✅ Chofer (app de entregas); ❌ Cobrador (rol creado, sin app)
 - ✅ Permisos por acción y autorización de supervisor con credenciales
 - ✅ Pantallas para administrar usuarios, roles y permisos
 - ✅ Auditoría de todo lo crítico, con visor y filtros
-- ✅ Offline de preventas; ❌ offline de entregas y cobranzas
+- ✅ Offline de preventas y entregas; ❌ offline de cobranzas
 - ✅ Conflictos: quedan en REVIEW con su motivo, el teléfono los muestra y Administración los resuelve en la web
 
 ### 11. Recibos e impresión — pendiente completo
@@ -130,9 +130,9 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 
 ## Base de datos (documento de diseño)
 
-Implementadas 40 tablas de las ~60 del documento: seguridad y auditoría, organización (sin vehículos), productos y precios por lote, compras/recepción/lotes, inventario (movimientos, saldos, transferencias y ajustes), clientes y direcciones, ventas con asignación por lote y devoluciones, preventas y visitas, pagos y movimientos de deuda, dispositivos, sincronización y GPS.
+Implementadas 44 tablas de las ~60 del documento: seguridad y auditoría, organización con vehículos, productos y precios por lote, compras/recepción/lotes, inventario (movimientos, saldos, transferencias y ajustes), clientes y direcciones, ventas con asignación por lote y devoluciones, preventas y visitas, pagos y movimientos de deuda, rutas de entrega con paradas y productos entregados, dispositivos, sincronización y GPS.
 
-Pendientes: `vehicles`, `product_ranges`, `lot_shrinkages` (la merma está en el lote y la recepción), `customer_rank_history` (hoy en auditoría), `receivable_accounts` (integrada en `customers`), `sale_payments` (integrada en `payments`), rutas, despachos, entregas, firmas, recibos, canastillos, caja, rendiciones y cierres.
+Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la recepción), `customer_rank_history` (hoy en auditoría), `receivable_accounts` (integrada en `customers`), `sale_payments` (integrada en `payments`), recibos imprimibles, canastillos, caja, rendiciones y cierres.
 
 ## Plan para completar el MVP
 
@@ -140,7 +140,7 @@ Pendientes: `vehicles`, `product_ranges`, `lot_shrinkages` (la merma está en el
 |---|---|---|
 | G. Brechas del núcleo ✅ | **Cobros de deuda** (web), pantallas de usuarios/roles, categorías y tipos de cliente, visor de auditoría, revisión de conflictos de sincronización, modificar preventa, direcciones adicionales y visitas en la app, rango de fechas libre | 1–1,5 semanas |
 | H. Inventario operativo ✅ | Transferencias central–sucursal (con peso recibido), ajustes con motivo, bajas y pérdidas, devoluciones autorizadas | 1–1,5 semanas |
-| I. Logística + app del chofer | Vehículos, rutas manuales (bloqueadas al iniciar), hoja de despacho, entregas offline con diferencias y problemas, firma digital, seguimiento GPS | 2,5–3 semanas |
+| I. Logística + app del chofer ✅ | Vehículos, rutas manuales (bloqueadas al iniciar), hoja de despacho, entregas offline con diferencias y problemas, firma digital, seguimiento GPS | 2,5–3 semanas |
 | J. Cobranza + app del cobrador + canastillos | Cobros offline, mapa de pendientes, recibo y firma, canastillos por cantidad y responsable, bajas y sanciones | 2–2,5 semanas |
 | K. Finanzas operativas | Cuentas de caja, movimientos automáticos (ventas, cobros, compras), egresos, rendiciones, cierres con diferencias | 1,5 semanas |
 | L. Recibos e impresión | Recibos PDF de venta, entrega y cobranza; impresión térmica 80 mm (web y Bluetooth desde la app); reimpresión | 1 semana |
