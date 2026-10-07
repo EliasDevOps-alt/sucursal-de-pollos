@@ -1,5 +1,5 @@
 import { Alert, Anchor, Badge, Button, Card, Group, Modal, SimpleGrid, Stack, Table, Text, Textarea } from '@mantine/core';
-import { IconArrowLeft, IconBan, IconLock } from '@tabler/icons-react';
+import { IconArrowBackUp, IconArrowLeft, IconBan, IconLock } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Fragment, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { fmtBob, fmtDate, fmtDateTime, fmtKg, fmtPct, fmtPerKg, PAYMENT_LABELS, PAYMENT_STATUS, SALE_STATUS } from '../../lib/format';
 import { notifyError, notifyOk } from '../../lib/notify';
+import { ReturnModal } from './ReturnModal';
 
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
@@ -25,6 +26,7 @@ export function SaleDetailPage() {
   const { can } = useAuth();
   const qc = useQueryClient();
   const [annulOpen, setAnnulOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
   const [reason, setReason] = useState('');
 
   const { data: s, isLoading, error } = useQuery({
@@ -60,7 +62,10 @@ export function SaleDetailPage() {
               <>
                 <Badge size="lg" variant="light" color={SALE_STATUS[s.status].color}>{SALE_STATUS[s.status].label}</Badge>
                 <Badge size="lg" variant="light" color={PAYMENT_STATUS[s.paymentStatus].color}>{PAYMENT_STATUS[s.paymentStatus].label}</Badge>
-                {s.status === 'CONFIRMED' && can('sales.annul') && (
+                {s.status === 'CONFIRMED' && can('sales.create') && (
+                  <Button variant="light" leftSection={<IconArrowBackUp size={16} />} onClick={() => setReturnOpen(true)}>Devolución</Button>
+                )}
+                {s.status === 'CONFIRMED' && Number(s.returnedAmount) === 0 && can('sales.annul') && (
                   <Button variant="light" color="red" leftSection={<IconBan size={16} />} onClick={() => setAnnulOpen(true)}>Anular</Button>
                 )}
               </>
@@ -73,9 +78,15 @@ export function SaleDetailPage() {
             </Alert>
           )}
 
+          {s.status === 'RETURNED' && (
+            <Alert color="grape" title="Venta devuelta por completo">
+              Todo lo vendido fue devuelto ({fmtBob(s.returnedAmount)}). El detalle de cada devolución está al final.
+            </Alert>
+          )}
+
           <SimpleGrid cols={{ base: 2, md: showProfit ? 5 : 3 }}>
             <Stat label="Cliente" value={s.customer?.name ?? 'Venta rápida'} />
-            <Stat label="Total" value={fmtBob(s.totalAmount)} />
+            <Stat label={Number(s.returnedAmount) > 0 ? 'Total (neto de devoluciones)' : 'Total'} value={Number(s.returnedAmount) > 0 ? `${fmtBob(s.profitability.revenue)}` : fmtBob(s.totalAmount)} />
             <Stat label="Pagado / a deuda" value={`${fmtBob(s.paidAmount)} / ${fmtBob(s.creditAmount)}`} />
             {showProfit && (
               <>
@@ -116,7 +127,10 @@ export function SaleDetailPage() {
                             </Text>
                           )}
                         </Table.Td>
-                        <Table.Td ta="right" fw={600}>{fmtKg(item.requestedWeightKg)}</Table.Td>
+                        <Table.Td ta="right" fw={600}>
+                          {fmtKg(item.requestedWeightKg)}
+                          {Number(item.returnedWeightKg) > 0 && <Text size="xs" c="grape">devuelto {fmtKg(item.returnedWeightKg)}</Text>}
+                        </Table.Td>
                         <Table.Td ta="right">{fmtPerKg(item.unitPrice)}</Table.Td>
                         {showProfit && <Table.Td />}
                         <Table.Td ta="right">{Number(item.discountAmount) ? `−${fmtBob(item.discountAmount)}` : '—'}</Table.Td>
@@ -154,8 +168,31 @@ export function SaleDetailPage() {
               <Text size="sm">Subtotal {fmtBob(s.subtotal)}</Text>
               {Number(s.discountAmount) > 0 && <Text size="sm" c="green">Descuento −{fmtBob(s.discountAmount)}</Text>}
               <Text fw={700} size="lg">Total {fmtBob(s.totalAmount)}</Text>
+              {Number(s.returnedAmount) > 0 && <Text size="sm" c="grape">Devuelto −{fmtBob(s.returnedAmount)}</Text>}
             </Group>
           </Card>
+
+          {s.returns.length > 0 && (
+            <Card withBorder>
+              <Text fw={600} mb="xs">Devoluciones</Text>
+              <Stack gap="sm">
+                {s.returns.map((r) => (
+                  <div key={r.id}>
+                    <Group gap="xs">
+                      <Text size="sm" fw={600}>{r.returnNumber}</Text>
+                      <Text size="sm">· {fmtDateTime(r.createdAt)} · <b>{fmtBob(r.totalAmount)}</b> {r.refundMethod === 'CREDIT' ? 'descontado de la deuda' : 'devuelto en efectivo'}</Text>
+                    </Group>
+                    <Text size="xs" c="dimmed">
+                      {r.reason} — registró {r.createdBy.fullName}, autorizó {r.authorizedBy.fullName}
+                    </Text>
+                    <Text size="xs">
+                      {r.items.map((it) => `${it.product.name} ${fmtKg(it.weightKg)} (${it.lot.lotCode}, ${it.disposition === 'RESTOCK' ? 'reingresó' : 'descartado'})`).join(' · ')}
+                    </Text>
+                  </div>
+                ))}
+              </Stack>
+            </Card>
+          )}
 
           {(s.payments.length > 0 || s.creditAuthorizedBy) && (
             <Card withBorder>
@@ -173,6 +210,8 @@ export function SaleDetailPage() {
             </Card>
           )}
           {s.notes && <Text size="sm" c="dimmed">Observaciones: {s.notes}</Text>}
+
+          <ReturnModal sale={s} opened={returnOpen} onClose={() => setReturnOpen(false)} />
 
           <Modal opened={annulOpen} onClose={() => setAnnulOpen(false)} title={`Anular venta ${s.saleNumber}`}>
             <Stack>

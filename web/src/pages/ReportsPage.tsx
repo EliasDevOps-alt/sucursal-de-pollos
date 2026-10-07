@@ -11,7 +11,7 @@ import { ChartCard } from '../components/viz/ChartCard';
 import { axisFormatterBob, BAR_MAX, chartChrome, compactBob, horizontalBars } from '../components/viz/chartDefaults';
 import { useDateRange } from '../components/viz/RangePicker';
 import { StatTile } from '../components/viz/StatTile';
-import { fmtBob, fmtDate, fmtDateTime, fmtKg, fmtPct, TREATMENT_LABELS } from '../lib/format';
+import { fmtBob, fmtDate, fmtDateTime, fmtKg, fmtPct, LOSS_CAUSES, TREATMENT_LABELS } from '../lib/format';
 
 const GROUP_LABELS = { product: 'Producto', lot: 'Lote', customer: 'Cliente', seller: 'Vendedor' } as const;
 type Group = keyof typeof GROUP_LABELS;
@@ -130,6 +130,10 @@ function ShrinkageTab({ range }: { range: { from: string; to: string } }) {
     queryFn: async () => (await api.get<ShrinkageReport>('/reports/shrinkage', { params: range })).data,
   });
   const chartRows = (data?.bySupplier ?? []).map((s) => ({ proveedor: s.supplier, 'Merma %': Number(s.shrinkagePercentage) }));
+  const losses = data?.inventoryLosses;
+  const lossRows = (losses?.byCause ?? []).map((c) => ({ causa: LOSS_CAUSES[c.cause] ?? c.cause, Pérdida: Number(c.amount) }));
+  const eventLink = (e: NonNullable<typeof losses>['events'][number]) =>
+    e.kind === 'return' ? `/ventas/${e.referenceId}` : e.kind === 'transfer' ? '/inventario?tab=transferencias' : '/inventario?tab=ajustes';
 
   return (
     <QueryState isLoading={isLoading} error={error}>
@@ -173,8 +177,88 @@ function ShrinkageTab({ range }: { range: { from: string; to: string } }) {
             }
           />
 
+          {losses && (
+            <>
+              <Text fw={600} size="lg" mt="sm">Pérdidas de inventario después de la recepción</Text>
+              <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }}>
+                <StatTile label="Kg perdidos" value={fmtKg(losses.totals.lossKg)} hint="bajas, faltantes y devoluciones descartadas" />
+                <StatTile label="Valor perdido" value={fmtBob(losses.totals.lossAmount)} hint="a costo real del lote" />
+                <StatTile label="Sobrantes de conteo" value={fmtKg(losses.totals.surplusKg)} hint={fmtBob(losses.totals.surplusAmount)} />
+                <StatTile label="Registros" value={String(losses.events.length)} />
+              </SimpleGrid>
+              <ChartCard
+                title="Pérdidas por causa"
+                subtitle="Valor a costo real, en el período"
+                empty={lossRows.length === 0}
+                rows={losses.byCause}
+                columns={[
+                  { label: 'Causa', value: (c) => LOSS_CAUSES[c.cause] ?? c.cause },
+                  { label: 'Registros', value: (c) => c.count, align: 'right' },
+                  { label: 'Kg', value: (c) => fmtKg(c.kg), align: 'right' },
+                  { label: 'Valor', value: (c) => fmtBob(c.amount), align: 'right' },
+                ]}
+                chart={
+                  <BarChart
+                    h={Math.max(140, lossRows.length * 44)}
+                    data={lossRows}
+                    dataKey="causa"
+                    orientation="vertical"
+                    series={[{ name: 'Pérdida', color: 'var(--viz-series-1)' }]}
+                    maxBarWidth={BAR_MAX}
+                    barProps={{ radius: [0, 4, 4, 0] }}
+                    withBarValueLabel
+                    valueFormatter={(v) => fmtBob(v)}
+                    valueLabelProps={{ formatter: (v: unknown) => compactBob(Number(v)), width: 90 }}
+                    yAxisProps={{ width: 190 }}
+                    {...chartChrome}
+                    {...horizontalBars}
+                  />
+                }
+              />
+              {losses.events.length > 0 && (
+                <Card withBorder p={0}>
+                  <Text fw={600} p="md" pb={0}>Detalle de pérdidas</Text>
+                  <Table.ScrollContainer minWidth={900}>
+                    <Table striped>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Fecha</Table.Th>
+                          <Table.Th>Causa</Table.Th>
+                          <Table.Th>Documento</Table.Th>
+                          <Table.Th>Producto / lote</Table.Th>
+                          <Table.Th>Almacén</Table.Th>
+                          <Table.Th ta="right">Kg</Table.Th>
+                          <Table.Th ta="right">Valor</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {losses.events.map((e) => (
+                          <Table.Tr key={e.id}>
+                            <Table.Td>{fmtDateTime(e.at)}</Table.Td>
+                            <Table.Td>
+                              <Text size="sm">{LOSS_CAUSES[e.cause] ?? e.cause}</Text>
+                              {e.notes && <Text size="xs" c="dimmed" maw={280}>{e.notes}</Text>}
+                            </Table.Td>
+                            <Table.Td><Anchor component={Link} to={eventLink(e)} size="sm">{e.document}</Anchor></Table.Td>
+                            <Table.Td>
+                              <Text size="sm">{e.product}</Text>
+                              <Text size="xs" c="dimmed">{e.lotCode}</Text>
+                            </Table.Td>
+                            <Table.Td>{e.warehouse}</Table.Td>
+                            <Table.Td ta="right">{e.cause === 'COUNT_SURPLUS' ? `+${fmtKg(-Number(e.kg))}` : fmtKg(e.kg)}</Table.Td>
+                            <Table.Td ta="right">{e.cause === 'COUNT_SURPLUS' ? `+${fmtBob(-Number(e.amount))}` : fmtBob(e.amount)}</Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </Table.ScrollContainer>
+                </Card>
+              )}
+            </>
+          )}
+
           <Card withBorder p={0}>
-            <Text fw={600} p="md" pb={0}>Detalle por lote</Text>
+            <Text fw={600} p="md" pb={0}>Merma de recepción por lote</Text>
             <Table.ScrollContainer minWidth={900}>
               <Table striped>
                 <Table.Thead>

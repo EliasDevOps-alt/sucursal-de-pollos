@@ -77,6 +77,31 @@ export const RECEIVABLE_LABELS: Record<string, string> = {
   PAYMENT: 'Cobro',
   ANNUL: 'Anulación de venta',
   ADJUSTMENT: 'Ajuste',
+  RETURN: 'Devolución',
+};
+
+export const TRANSFER_STATUS: Record<string, { label: string; color: string }> = {
+  IN_TRANSIT: { label: 'En tránsito', color: 'yellow' },
+  RECEIVED: { label: 'Recibida', color: 'green' },
+  CANCELLED: { label: 'Cancelada', color: 'gray' },
+};
+
+export const ADJUSTMENT_REASONS: Record<string, string> = {
+  PHYSICAL_COUNT: 'Conteo físico',
+  EXPIRED: 'Vencido',
+  DAMAGED: 'Dañado',
+  SPOILED: 'Descompuesto',
+  THEFT: 'Robo o faltante',
+  OTHER: 'Otro',
+};
+
+/** Causas del reporte de pérdidas de inventario. */
+export const LOSS_CAUSES: Record<string, string> = {
+  ...ADJUSTMENT_REASONS,
+  COUNT_SHORTAGE: 'Faltante en conteo',
+  COUNT_SURPLUS: 'Sobrante en conteo',
+  TRANSIT: 'Faltante en transferencia',
+  RETURN_DISCARD: 'Devolución descartada',
 };
 
 export const PRESALE_STATUS: Record<string, { label: string; color: string }> = {

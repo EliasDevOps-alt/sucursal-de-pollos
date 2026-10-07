@@ -301,10 +301,14 @@ export interface SaleDetail extends Omit<SaleListItem, '_count'> {
   creditExceptionReason: string | null;
   branch: Ref | null;
   payments: { id: string; amount: Dec; paymentMethod: string; paymentDate: string; receivedBy: { fullName: string } }[];
+  returnedAmount: Dec;
+  returns: SaleReturn[];
   items: {
     id: string;
     product: Ref;
     requestedWeightKg: Dec;
+    returnedWeightKg: Dec;
+    returnedAmount: Dec;
     originalUnitPrice: Dec;
     unitPrice: Dec;
     discountAmount: Dec;
@@ -322,12 +326,94 @@ export interface SaleDetail extends Omit<SaleListItem, '_count'> {
       forceReason: string | null;
       authorizedBy: { fullName: string } | null;
       lot: { id: string; lotCode: string; expiryDate: string };
+      returnedWeightKg: Dec;
+      restockedWeightKg: Dec;
     }[];
   }[];
   profitability: { revenue: Dec; cost: Dec; margin: Dec; marginPercentage: Dec };
 }
 
+export interface SaleReturn {
+  id: string;
+  returnNumber: string;
+  createdAt: string;
+  reason: string;
+  refundMethod: 'CREDIT' | 'CASH';
+  totalAmount: Dec;
+  restockedKg: Dec;
+  discardedKg: Dec;
+  lossAmount: Dec;
+  sale: { id: string; saleNumber: string };
+  customer: Ref | null;
+  warehouse: Ref;
+  authorizedBy: { fullName: string };
+  createdBy: { fullName: string };
+  items: { id: string; saleItemId: string; weightKg: Dec; amount: Dec; costPerKg: Dec; disposition: 'RESTOCK' | 'DISCARD'; product: Ref; lot: { id: string; lotCode: string } }[];
+}
+
 // ── Inventario ─────────────────────────────────────────────
+export interface LotBalance {
+  lotId: string;
+  lotCode: string;
+  product: Ref;
+  expiryDate: string;
+  expired: boolean;
+  weightKg: Dec;
+  costPerKg: Dec;
+  value: Dec;
+}
+
+export type TransferStatus = 'IN_TRANSIT' | 'RECEIVED' | 'CANCELLED';
+export interface Transfer {
+  id: string;
+  transferNumber: string;
+  status: TransferStatus;
+  notes: string | null;
+  sentAt: string;
+  receivedAt: string | null;
+  receiveNotes: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  origin: { id: string; code: string; name: string; branchId: string | null };
+  destination: { id: string; code: string; name: string; branchId: string | null; branch: { name: string; transferWeighingEnabled: boolean } | null };
+  sentBy: { fullName: string };
+  receivedBy: { fullName: string } | null;
+  cancelledBy: { fullName: string } | null;
+  items: {
+    id: string;
+    product: Ref;
+    lot: { id: string; lotCode: string; expiryDate: string };
+    sentWeightKg: Dec;
+    receivedWeightKg: Dec | null;
+    differenceKg: Dec;
+    costPerKg: Dec;
+    lossAmount: Dec;
+  }[];
+}
+
+export type AdjustmentKind = 'COUNT' | 'LOSS';
+export interface Adjustment {
+  id: string;
+  adjustmentNumber: string;
+  kind: AdjustmentKind;
+  reasonCode: string;
+  systemWeightKg: Dec;
+  newWeightKg: Dec;
+  weightKg: Dec;
+  costPerKg: Dec;
+  amount: Dec;
+  notes: string;
+  status: 'VALID' | 'ANNULLED';
+  createdAt: string;
+  annulledAt: string | null;
+  annulReason: string | null;
+  warehouse: { id: string; code: string; name: string };
+  product: Ref;
+  lot: { id: string; lotCode: string; expiryDate: string };
+  createdBy: { fullName: string };
+  annulledBy: { fullName: string } | null;
+}
+
 export interface StockRow {
   product: { id: string; code: string; name: string; category: { name: string } };
   weightKg: Dec;
@@ -410,6 +496,11 @@ export interface Profitability {
 }
 
 export interface ShrinkageReport {
+  inventoryLosses: {
+    totals: { lossKg: Dec; lossAmount: Dec; surplusKg: Dec; surplusAmount: Dec };
+    byCause: { cause: string; kg: Dec; amount: Dec; count: number }[];
+    events: { id: string; at: string; cause: string; document: string; kind: 'adjustment' | 'transfer' | 'return'; referenceId: string; product: string; lotCode: string; warehouse: string; kg: Dec; amount: Dec; notes: string | null }[];
+  };
   totals: { purchasedKg: Dec; shrinkageKg: Dec; shrinkagePercentage: Dec; loss: Dec };
   bySupplier: { supplierId: string; supplier: string; lots: number; purchasedKg: Dec; shrinkageKg: Dec; shrinkagePercentage: Dec; loss: Dec }[];
   lots: { id: string; lotCode: string; product: string; supplier: string; receivedAt: string; purchasedKg: Dec; netKg: Dec; shrinkageKg: Dec; shrinkagePercentage: Dec; loss: Dec; treatment: string }[];

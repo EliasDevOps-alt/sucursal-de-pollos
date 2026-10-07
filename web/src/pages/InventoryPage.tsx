@@ -1,13 +1,15 @@
 import { Anchor, Card, Group, Select, SimpleGrid, Table, Tabs, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import type { StockRow, Warehouse } from '../api/types';
 import { PageHeader } from '../components/PageHeader';
 import { StatTile } from '../components/viz/StatTile';
 import { QueryState } from '../components/QueryState';
 import { fmtBob, fmtDate, fmtDateTime, fmtKg, fmtPerKg, MOVEMENT_LABELS } from '../lib/format';
+import { AdjustmentsTab } from './inventory/AdjustmentsTab';
+import { TransfersTab } from './inventory/TransfersTab';
 import { LotsPage } from './lots/LotsPage';
 
 interface MovementRow {
@@ -27,7 +29,11 @@ interface MovementRow {
 
 const REF_LINKS: Record<string, (id: string) => string> = {
   sale: (id) => `/ventas/${id}`,
+  transfer: () => '/inventario?tab=transferencias',
+  adjustment: () => '/inventario?tab=ajustes',
 };
+
+const TABS = ['stock', 'lotes', 'kardex', 'transferencias', 'ajustes'];
 
 function StockTab({ warehouseId }: { warehouseId: string | null }) {
   const { data, isLoading, error } = useQuery({
@@ -130,11 +136,14 @@ function KardexTab({ warehouseId }: { warehouseId: string | null }) {
 
 export function InventoryPage() {
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const requested = params.get('tab');
+  const tab = requested && TABS.includes(requested) ? requested : 'stock';
   const warehouses = useQuery({ queryKey: ['warehouses'], queryFn: async () => (await api.get<Warehouse[]>('/warehouses')).data });
 
   return (
     <>
-      <PageHeader title="Inventario" subtitle="Stock por producto, lotes y kardex de movimientos" />
+      <PageHeader title="Inventario" subtitle="Stock por producto y lote, transferencias entre almacenes, ajustes, bajas y kardex" />
       <Group mb="sm">
         <Select
           placeholder="Todos los almacenes"
@@ -146,14 +155,18 @@ export function InventoryPage() {
         />
         <Text size="sm" c="dimmed">El historial oficial es el kardex; el stock es su suma.</Text>
       </Group>
-      <Tabs defaultValue="stock" keepMounted={false}>
+      <Tabs value={tab} onChange={(v) => setParams(v && v !== 'stock' ? { tab: v } : {})} keepMounted={false}>
         <Tabs.List mb="md">
           <Tabs.Tab value="stock">Stock por producto</Tabs.Tab>
-          <Tabs.Tab value="lots">Lotes</Tabs.Tab>
+          <Tabs.Tab value="lotes">Lotes</Tabs.Tab>
+          <Tabs.Tab value="transferencias">Transferencias</Tabs.Tab>
+          <Tabs.Tab value="ajustes">Ajustes y bajas</Tabs.Tab>
           <Tabs.Tab value="kardex">Kardex</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="stock"><StockTab warehouseId={warehouseId} /></Tabs.Panel>
-        <Tabs.Panel value="lots"><LotsPage embedded /></Tabs.Panel>
+        <Tabs.Panel value="lotes"><LotsPage embedded /></Tabs.Panel>
+        <Tabs.Panel value="transferencias"><TransfersTab warehouseId={warehouseId} /></Tabs.Panel>
+        <Tabs.Panel value="ajustes"><AdjustmentsTab warehouseId={warehouseId} /></Tabs.Panel>
         <Tabs.Panel value="kardex"><KardexTab warehouseId={warehouseId} /></Tabs.Panel>
       </Tabs>
     </>
