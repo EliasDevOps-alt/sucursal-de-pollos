@@ -1,13 +1,17 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { CustomerStatus, PresaleStatus, Prisma, SyncStatus } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { AuthUser } from '../auth/auth-user';
 import { D, kg, money, ZERO } from '../common/decimal';
 import { SequenceService } from '../common/sequence.service';
+import { PERMISSIONS } from '../auth/permissions';
+import { RoutesService } from '../logistics/routes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CustomerAddressAddPayload,
   CustomerCreatePayload,
+  DeliveryCompletePayload,
+  DeliveryFailPayload,
   GpsPositionPayload,
   parsePayload,
   PresaleCancelPayload,
@@ -39,6 +43,7 @@ export class MobileService {
     private readonly prisma: PrismaService,
     private readonly sequences: SequenceService,
     private readonly audit: AuditService,
+    private readonly routes: RoutesService,
   ) {}
 
   async registerDevice(dto: RegisterDeviceDto, user: AuthUser) {
@@ -137,6 +142,10 @@ export class MobileService {
       })),
       customerTypes: customerTypes.map((t) => ({ id: t.id, name: t.name })),
       presales,
+      // Chofer: sus rutas con paradas, pedidos y lo ya registrado (sin las firmas, para no pesar).
+      routes: user.permissions.includes(PERMISSIONS.DELIVERIES_REGISTER)
+        ? (await this.routes.forDriver(user.id)).map((r) => ({ ...r, stops: r.stops.map(({ signature, ...s }) => ({ ...s, signed: !!signature })) }))
+        : [],
     };
   }
 
@@ -447,6 +456,26 @@ export class MobileService {
         return { entityType: 'visit', entityId: p.id, reference: null };
       }
 
+      case 'DELIVERY_COMPLETE': {
+        need(PERMISSIONS.DELIVERIES_REGISTER);
+        const p = await parsePayload(DeliveryCompletePayload, op.payload);
+        const { stopId, ...dto } = p;
+        const r = await this.asOperation(() =>
+          this.routes.deliverInTx(tx, stopId, dto, user, { at: new Date(op.createdAtDevice), operationId: op.deviceOperationId }),
+        );
+        return { entityType: 'route_stop', entityId: r.stopId, reference: r.saleNumber };
+      }
+
+      case 'DELIVERY_FAIL': {
+        need(PERMISSIONS.DELIVERIES_REGISTER);
+        const p = await parsePayload(DeliveryFailPayload, op.payload);
+        const { stopId, ...dto } = p;
+        const r = await this.asOperation(() =>
+          this.routes.failInTx(tx, stopId, dto, user, { at: new Date(op.createdAtDevice), operationId: op.deviceOperationId }),
+        );
+        return { entityType: 'route_stop', entityId: r.stopId, reference: null };
+      }
+
       case 'GPS_POSITION': {
         need('sync.push');
         const p = await parsePayload(GpsPositionPayload, op.payload);
@@ -464,6 +493,18 @@ export class MobileService {
         });
         return { entityType: 'gps_position', entityId: position.id, reference: null };
       }
+    }
+  }
+
+  /** Convierte los errores de negocio de los servicios compartidos en errores de operación (quedan en REVIEW). */
+  private async asOperation<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e instanceof BadRequestException || e instanceof ConflictException || e instanceof NotFoundException || e instanceof ForbiddenException) {
+        throw new OperationError(e.message);
+      }
+      throw e;
     }
   }
 }

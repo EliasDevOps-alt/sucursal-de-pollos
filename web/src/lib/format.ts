@@ -111,3 +111,28 @@ export const PRESALE_STATUS: Record<string, { label: string; color: string }> = 
   DELIVERED: { label: 'Atendida', color: 'green' },
   CANCELLED: { label: 'Cancelada', color: 'gray' },
 };
+
+export const ROUTE_STATUS: Record<string, { label: string; color: string }> = {
+  PLANNED: { label: 'Planificada', color: 'blue' },
+  IN_PROGRESS: { label: 'En ruta', color: 'yellow' },
+  COMPLETED: { label: 'Liquidada', color: 'green' },
+  CANCELLED: { label: 'Cancelada', color: 'gray' },
+};
+
+export const STOP_STATUS: Record<string, { label: string; color: string }> = {
+  PENDING: { label: 'Pendiente', color: 'gray' },
+  DELIVERED: { label: 'Entregado', color: 'green' },
+  PARTIAL: { label: 'Con diferencias', color: 'yellow' },
+  FAILED: { label: 'No entregado', color: 'red' },
+};
+
+export const DELIVERY_PROBLEMS: Record<string, string> = {
+  CLOSED: 'Local cerrado',
+  NOT_FOUND: 'No se encontró al cliente',
+  REJECTED: 'Rechazó el pedido',
+  NO_PAYMENT: 'Sin dinero para pagar',
+  WRONG_ADDRESS: 'Dirección incorrecta',
+  DAMAGED: 'Producto dañado',
+  NOT_VISITED: 'No se visitó',
+  OTHER: 'Otro',
+};

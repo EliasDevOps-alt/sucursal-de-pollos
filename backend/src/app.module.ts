@@ -12,6 +12,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { HealthController } from './health.controller';
 import { InventoryModule } from './inventory/inventory.module';
+import { LogisticsModule } from './logistics/logistics.module';
 import { LotsModule } from './lots/lots.module';
 import { MobileModule } from './mobile/mobile.module';
 import { PresalesModule } from './presales/presales.module';
@@ -42,6 +43,7 @@ import { UsersModule } from './users/users.module';
     CollectionsModule,
     AdminModule,
     TransfersModule,
+    LogisticsModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -12,6 +12,10 @@ import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
 import { CustomersPage } from './pages/customers/CustomersPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { InventoryPage } from './pages/InventoryPage';
+import { LoadSheetPage } from './pages/logistics/LoadSheetPage';
+import { LogisticsPage } from './pages/logistics/LogisticsPage';
+import { RouteDetailPage } from './pages/logistics/RouteDetailPage';
+import { RoutePlanPage } from './pages/logistics/RoutePlanPage';
 import { LoginPage } from './pages/LoginPage';
 import { LotDetailPage } from './pages/lots/LotDetailPage';
 import { LotsPage } from './pages/lots/LotsPage';
@@ -50,6 +54,7 @@ export function App() {
 
   return (
     <Routes>
+      <Route path="logistica/:id/hoja" element={<LoadSheetPage />} />
       <Route element={<AppLayout />}>
         <Route index element={<DashboardPage />} />
         <Route path="compras" element={<PurchasesPage />} />
@@ -62,6 +67,10 @@ export function App() {
         <Route path="preventas/recorrido" element={<RoutePage />} />
         <Route path="preventas/:id" element={<PresaleDetailPage />} />
         <Route path="cobranza" element={<CollectionsPage />} />
+        <Route path="logistica" element={<LogisticsPage />} />
+        <Route path="logistica/nueva" element={<RoutePlanPage />} />
+        <Route path="logistica/:id" element={<RouteDetailPage />} />
+        <Route path="logistica/:id/editar" element={<RoutePlanPage />} />
         <Route path="clientes" element={<CustomersPage />} />
         <Route path="clientes/:id" element={<CustomerDetailPage />} />
         <Route path="inventario" element={<InventoryPage />} />

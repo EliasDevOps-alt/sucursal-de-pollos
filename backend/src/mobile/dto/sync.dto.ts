@@ -10,6 +10,8 @@ export const OPERATION_TYPES = [
   'PRESALE_CANCEL',
   'VISIT_CREATE',
   'GPS_POSITION',
+  'DELIVERY_COMPLETE',
+  'DELIVERY_FAIL',
 ] as const;
 export type OperationType = (typeof OPERATION_TYPES)[number];
 

@@ -28,6 +28,12 @@ type Db = Prisma.TransactionClient;
 
 const TX_OPTIONS = { timeout: 20_000 };
 
+export interface DeliveryContext {
+  routeNumber: string;
+  /** Excepción de crédito autorizada al planificar la ruta (el chofer no puede pedirla en la calle). */
+  creditApprover?: { id: string; fullName: string; reason: string } | null;
+}
+
 export type IssueType = 'LOT_OVERRIDE' | 'PRICE_CHANGE' | 'CREDIT_LIMIT';
 
 /** Excepción de negocio que se permite solo con autorización y motivo. */
@@ -150,136 +156,192 @@ export class SalesService {
 
   async create(dto: CreateSaleDto, actor: AuthUser) {
     const supervisor = await this.resolveSupervisor(dto, true);
+    const saleId = await this.prisma.$transaction((tx) => this.createInTx(tx, dto, actor, supervisor), TX_OPTIONS);
+    return this.findOne(saleId);
+  }
 
-    const saleId = await this.prisma.$transaction(async (tx) => {
-      // Con bloqueo de filas: el stock y la deuda leídos aquí no cambian hasta terminar la transacción.
-      const built = await this.build(tx, dto, actor, true);
-      const issues = this.resolveIssues(built.issues, actor, supervisor, built.saleMode, built.branchPriceEdit);
-      const blocked = issues.find((i) => !i.approver);
-      if (blocked) throw new ForbiddenException(`${blocked.message}: requiere autorización (${blocked.permission})`);
-      const noReason = issues.find((i) => i.needsReason);
-      if (noReason) throw new BadRequestException(`${noReason.message}: indique el motivo`);
-
-      const lotIssue = issues.find((i) => i.type === 'LOT_OVERRIDE');
-      const creditIssue = issues.find((i) => i.type === 'CREDIT_LIMIT');
-      const priceIssue = (idx: number) => issues.find((i) => i.type === 'PRICE_CHANGE' && i.lineIndex === idx);
-
-      // Atender una preventa: se bloquea y debe seguir pendiente y ser del mismo cliente.
-      if (dto.presaleId) {
-        const [presale] = await tx.$queryRaw<{ status: PresaleStatus; customer_id: string; presale_number: string }[]>`
-          SELECT status, customer_id, presale_number FROM presales WHERE id = ${dto.presaleId}::uuid FOR UPDATE`;
-        if (!presale) throw new BadRequestException('Preventa inexistente');
-        if (presale.status !== PresaleStatus.PENDING && presale.status !== PresaleStatus.CONFIRMED) {
-          throw new ConflictException(`La preventa ${presale.presale_number} ya fue atendida o cancelada`);
-        }
-        if (presale.customer_id !== built.customer?.id) throw new BadRequestException('La venta debe ser para el cliente de la preventa');
+  /**
+   * Registra la venta dentro de una transacción existente. Devuelve el id.
+   * Con `delivery` es una entrega en ruta: la preventa está asignada a la ruta, el cobro lo recibe el chofer
+   * y un exceso de crédito no bloquea (la mercadería ya se entregó): usa la autorización dada al planificar
+   * o, si no la hay, queda marcado para revisión.
+   */
+  async createInTx(tx: Prisma.TransactionClient, dto: CreateSaleDto, actor: AuthUser, supervisor: AuthUser | null, delivery?: DeliveryContext): Promise<string> {
+    // Con bloqueo de filas: el stock y la deuda leídos aquí no cambian hasta terminar la transacción.
+    const built = await this.build(tx, dto, actor, true, !!delivery);
+    const issues = this.resolveIssues(built.issues, actor, supervisor, built.saleMode, built.branchPriceEdit);
+    let creditOverLimit: Issue | undefined;
+    if (delivery) {
+      const credit = issues.find((i) => i.type === 'CREDIT_LIMIT' && !i.approver);
+      if (credit && delivery.creditApprover) {
+        credit.approver = { id: delivery.creditApprover.id, fullName: delivery.creditApprover.fullName };
+        credit.reason = delivery.creditApprover.reason;
+        credit.needsReason = false;
+      } else if (credit) {
+        creditOverLimit = credit;
+        issues.splice(issues.indexOf(credit), 1);
       }
+    }
+    const blocked = issues.find((i) => !i.approver);
+    if (blocked) throw new ForbiddenException(`${blocked.message}: requiere autorización (${blocked.permission})`);
+    const noReason = issues.find((i) => i.needsReason);
+    if (noReason) throw new BadRequestException(`${noReason.message}: indique el motivo`);
 
-      const saleNumber = await this.sequences.next(tx, 'sale');
-      const sale = await tx.sale.create({
+    const lotIssue = issues.find((i) => i.type === 'LOT_OVERRIDE');
+    const creditIssue = issues.find((i) => i.type === 'CREDIT_LIMIT');
+    const priceIssue = (idx: number) => issues.find((i) => i.type === 'PRICE_CHANGE' && i.lineIndex === idx);
+
+    // Atender una preventa: se bloquea y debe seguir pendiente y ser del mismo cliente.
+    if (dto.presaleId) {
+      const [presale] = await tx.$queryRaw<{ status: PresaleStatus; customer_id: string; presale_number: string }[]>`
+        SELECT status, customer_id, presale_number FROM presales WHERE id = ${dto.presaleId}::uuid FOR UPDATE`;
+      if (!presale) throw new BadRequestException('Preventa inexistente');
+      const attendable: PresaleStatus[] = delivery ? [PresaleStatus.ASSIGNED] : [PresaleStatus.PENDING, PresaleStatus.CONFIRMED];
+      if (!attendable.includes(presale.status)) {
+        throw new ConflictException(`La preventa ${presale.presale_number} ya fue atendida o cancelada`);
+      }
+      if (presale.customer_id !== built.customer?.id) throw new BadRequestException('La venta debe ser para el cliente de la preventa');
+    }
+
+    const saleNumber = await this.sequences.next(tx, 'sale');
+    const sale = await tx.sale.create({
+      data: {
+        saleNumber,
+        customerId: built.customer?.id,
+        warehouseId: built.warehouse.id,
+        branchId: built.warehouse.branchId,
+        sellerId: actor.id,
+        saleMode: dto.presaleId ? SaleMode.PRESALE : built.saleMode,
+        subtotal: built.subtotal,
+        discountAmount: built.discount,
+        totalAmount: built.total,
+        paymentStatus: built.paymentStatus,
+        paidAmount: built.paid,
+        creditAmount: built.credit,
+        creditAuthorizedById: creditIssue?.approver?.id,
+        creditExceptionReason: creditIssue?.reason ?? (creditOverLimit ? `Entregado en ruta ${delivery!.routeNumber} sin autorización previa: ${creditOverLimit.message}` : undefined),
+        notes: dto.notes,
+      },
+    });
+
+    for (const [idx, line] of built.lines.entries()) {
+      const pIssue = priceIssue(idx);
+      const item = await tx.saleItem.create({
         data: {
-          saleNumber,
-          customerId: built.customer?.id,
-          warehouseId: built.warehouse.id,
-          branchId: built.warehouse.branchId,
-          sellerId: actor.id,
-          saleMode: dto.presaleId ? SaleMode.PRESALE : built.saleMode,
-          subtotal: built.subtotal,
-          discountAmount: built.discount,
-          totalAmount: built.total,
-          paymentStatus: built.paymentStatus,
-          paidAmount: built.paid,
-          creditAmount: built.credit,
-          creditAuthorizedById: creditIssue?.approver?.id,
-          creditExceptionReason: creditIssue?.reason,
-          notes: dto.notes,
+          saleId: sale.id,
+          productId: line.productId,
+          requestedWeightKg: line.weightKg,
+          requestedQuantity: line.quantity,
+          originalUnitPrice: line.originalUnitPrice,
+          unitPrice: line.unitPrice,
+          discountAmount: line.discount,
+          subtotal: line.subtotal,
+          priceChangeReason: pIssue?.reason,
+          priceAuthorizedById: pIssue?.approver?.id,
         },
       });
-
-      for (const [idx, line] of built.lines.entries()) {
-        const pIssue = priceIssue(idx);
-        const item = await tx.saleItem.create({
+      for (const a of line.allocations) {
+        await tx.saleLotAllocation.create({
           data: {
-            saleId: sale.id,
-            productId: line.productId,
-            requestedWeightKg: line.weightKg,
-            requestedQuantity: line.quantity,
-            originalUnitPrice: line.originalUnitPrice,
-            unitPrice: line.unitPrice,
-            discountAmount: line.discount,
-            subtotal: line.subtotal,
-            priceChangeReason: pIssue?.reason,
-            priceAuthorizedById: pIssue?.approver?.id,
-          },
-        });
-        for (const a of line.allocations) {
-          await tx.saleLotAllocation.create({
-            data: {
-              saleItemId: item.id,
-              lotId: a.lot.lotId,
-              weightKg: a.weightKg,
-              costPerKg: a.lot.costPerKg,
-              salePricePerKg: a.price,
-              forcedLot: a.forced,
-              authorizedById: a.forced ? lotIssue?.approver?.id : undefined,
-              forceReason: a.forced ? lotIssue?.reason : undefined,
-            },
-          });
-          await this.inventory.registerMovement(tx, {
-            warehouseId: built.warehouse.id,
-            productId: line.productId,
+            saleItemId: item.id,
             lotId: a.lot.lotId,
-            movementType: InventoryMovementType.SALE,
-            weightKg: a.weightKg.negated(),
-            unitCostPerKg: a.lot.costPerKg,
-            referenceType: 'sale',
-            referenceId: sale.id,
-            createdById: actor.id,
-          });
-        }
-      }
-
-      if (built.paid.gt(0)) {
-        await tx.payment.create({
-          data: {
-            customerId: built.customer?.id,
-            saleId: sale.id,
-            amount: built.paid,
-            paymentMethod: dto.paymentMethod!,
-            paymentSource: built.saleMode === SaleMode.BRANCH ? 'BRANCH' : 'CENTRAL',
-            receivedById: actor.id,
+            weightKg: a.weightKg,
+            costPerKg: a.lot.costPerKg,
+            salePricePerKg: a.price,
+            forcedLot: a.forced,
+            authorizedById: a.forced ? lotIssue?.approver?.id : undefined,
+            forceReason: a.forced ? lotIssue?.reason : undefined,
           },
         });
+        await this.inventory.registerMovement(tx, {
+          warehouseId: built.warehouse.id,
+          productId: line.productId,
+          lotId: a.lot.lotId,
+          movementType: InventoryMovementType.SALE,
+          weightKg: a.weightKg.negated(),
+          unitCostPerKg: a.lot.costPerKg,
+          referenceType: 'sale',
+          referenceId: sale.id,
+          createdById: actor.id,
+        });
       }
-      if (built.credit.gt(0)) {
-        await this.receivable(tx, built.customer!.id, ReceivableMovementType.CHARGE, built.credit, sale.id, actor.id);
-      }
+    }
 
-      if (dto.presaleId) {
-        await tx.presale.update({ where: { id: dto.presaleId }, data: { status: PresaleStatus.DELIVERED, saleId: sale.id } });
-      }
+    if (built.paid.gt(0)) {
+      await tx.payment.create({
+        data: {
+          customerId: built.customer?.id,
+          saleId: sale.id,
+          amount: built.paid,
+          paymentMethod: dto.paymentMethod!,
+          paymentSource: delivery ? 'DRIVER' : built.saleMode === SaleMode.BRANCH ? 'BRANCH' : 'CENTRAL',
+          receivedById: actor.id,
+        },
+      });
+    }
+    if (built.credit.gt(0)) {
+      await this.receivable(tx, built.customer!.id, ReceivableMovementType.CHARGE, built.credit, sale.id, actor.id);
+    }
+    if (built.overpaid.gt(0) && built.customer) {
+      const receiptNumber = await this.sequences.next(tx, 'collection');
+      const advance = await tx.payment.create({
+        data: {
+          customerId: built.customer.id,
+          amount: built.overpaid,
+          paymentMethod: dto.paymentMethod!,
+          paymentSource: 'DRIVER',
+          receivedById: actor.id,
+          receiptNumber,
+          isAdvance: true,
+          notes: `Excedente cobrado al entregar la venta ${saleNumber}`,
+        },
+      });
+      await this.receivables.apply(tx, {
+        customerId: built.customer.id,
+        type: ReceivableMovementType.PAYMENT,
+        amount: built.overpaid.negated(),
+        referenceType: 'collection',
+        referenceId: advance.id,
+        actorId: actor.id,
+        reason: `Excedente cobrado al entregar ${saleNumber}`,
+      });
+    }
 
+    if (dto.presaleId) {
+      await tx.presale.update({ where: { id: dto.presaleId }, data: { status: PresaleStatus.DELIVERED, saleId: sale.id } });
+    }
+
+    await this.audit.log(
+      { userId: actor.id, action: 'sales.create', entityType: 'sale', entityId: sale.id, newData: { saleNumber, total: built.total, paymentStatus: built.paymentStatus, presaleId: dto.presaleId } },
+      tx,
+    );
+    if (creditOverLimit) {
       await this.audit.log(
-        { userId: actor.id, action: 'sales.create', entityType: 'sale', entityId: sale.id, newData: { saleNumber, total: built.total, paymentStatus: built.paymentStatus, presaleId: dto.presaleId } },
+        {
+          userId: actor.id,
+          action: 'credit.exceeded_on_delivery',
+          entityType: 'sale',
+          entityId: sale.id,
+          newData: { message: creditOverLimit.message, route: delivery!.routeNumber },
+          reason: 'La mercadería ya fue entregada; requiere revisión de Administración',
+        },
         tx,
       );
-      for (const issue of issues) {
-        await this.audit.log(
-          {
-            userId: issue.approver!.id,
-            action: { LOT_OVERRIDE: 'lot.override', PRICE_CHANGE: 'price.modify', CREDIT_LIMIT: 'credit.exception_authorize' }[issue.type],
-            entityType: 'sale',
-            entityId: sale.id,
-            newData: { message: issue.message, seller: actor.username },
-            reason: issue.reason,
-          },
-          tx,
-        );
-      }
-      return sale.id;
-    }, TX_OPTIONS);
-
-    return this.findOne(saleId);
+    }
+    for (const issue of issues) {
+      await this.audit.log(
+        {
+          userId: issue.approver!.id,
+          action: { LOT_OVERRIDE: 'lot.override', PRICE_CHANGE: 'price.modify', CREDIT_LIMIT: 'credit.exception_authorize' }[issue.type],
+          entityType: 'sale',
+          entityId: sale.id,
+          newData: { message: issue.message, seller: actor.username },
+          reason: issue.reason,
+        },
+        tx,
+      );
+    }
+    return sale.id;
   }
 
   /** Anula la venta: devuelve el stock a los mismos lotes y revierte la deuda. No borra nada. */
@@ -344,7 +406,7 @@ export class SalesService {
 
   // ── Internos ────────────────────────────────────────────
 
-  private async build(db: Db, dto: CreateSaleDto, actor: AuthUser, lock: boolean) {
+  private async build(db: Db, dto: CreateSaleDto, actor: AuthUser, lock: boolean, capPaid = false) {
     const warehouse = await db.warehouse.findFirst({ where: { id: dto.warehouseId, isActive: true }, include: { branch: true } });
     if (!warehouse) throw new BadRequestException('Almacén inexistente o inactivo');
     if (actor.branchId && warehouse.branchId !== actor.branchId) {
@@ -453,7 +515,14 @@ export class SalesService {
     const total = money(subtotal.minus(discount));
 
     // Si no se indica el pago, se asume contado.
-    const paid = money(D(dto.paidAmount ?? total));
+    let paid = money(D(dto.paidAmount ?? total));
+    // En una entrega el chofer cobra con un total estimado sin conexión: lo que exceda el total real
+    // no se rechaza (el dinero ya se recibió) y queda como saldo a favor del cliente.
+    let overpaid = ZERO;
+    if (capPaid && paid.gt(total)) {
+      overpaid = money(paid.minus(total));
+      paid = total;
+    }
     if (paid.gt(total)) throw new BadRequestException('El monto pagado no puede superar el total (el cambio se entrega en caja)');
     if (paid.gt(0) && !dto.paymentMethod) throw new BadRequestException('Indique el método de pago');
     const credit = money(total.minus(paid));
@@ -485,6 +554,7 @@ export class SalesService {
       discount,
       total,
       paid,
+      overpaid,
       credit,
       paymentStatus,
       issues,

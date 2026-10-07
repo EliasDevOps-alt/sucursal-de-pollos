@@ -104,7 +104,7 @@ export function RoutePage() {
       <QueryState isLoading={isLoading} error={error}>
         <Grid>
           <Grid.Col span={{ base: 12, lg: 8 }}>
-            <Card withBorder p={0} style={{ overflow: 'hidden' }}>
+            <Card withBorder p={0} style={{ overflow: 'hidden', isolation: 'isolate' }}>
               <MapContainer center={center} zoom={13} style={{ height: 520 }} scrollWheelZoom>
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

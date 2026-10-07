@@ -12,6 +12,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 
 const API = process.env.API_URL ?? 'http://localhost:3000/api';
 const DAYS = Number(process.env.DEMO_DAYS ?? 30);
@@ -90,6 +91,9 @@ const TIME_COLUMNS: [string, string[]][] = [
   ['transfers', ['sent_at', 'received_at', 'cancelled_at']],
   ['inventory_adjustments', ['created_at', 'annulled_at']],
   ['sale_returns', ['created_at']],
+  ['delivery_routes', ['created_at', 'dispatched_at', 'closed_at', 'cancelled_at']],
+  ['route_stops', ['resolved_at_device', 'resolved_at']],
+  ['vehicles', ['created_at', 'updated_at']],
 ];
 
 /** Mueve lo creado desde `realStart` a la ventana [windowStart, windowEnd], conservando el orden relativo. */
@@ -156,7 +160,7 @@ const KG_BY_TYPE: Record<string, [number, number]> = {
   quick: [2, 12],
 };
 
-const stats = { purchases: 0, sales: 0, presales: 0, attended: 0, credit: 0, skippedLines: 0, transfers: 0, branchSales: 0, events: [] as string[] };
+const stats = { purchases: 0, sales: 0, presales: 0, attended: 0, credit: 0, skippedLines: 0, transfers: 0, branchSales: 0, routes: 0, failedStops: 0, events: [] as string[] };
 // Las compras cubren también lo que se envía a la sucursal.
 const BRANCH_SUPPLY = 1.06;
 
@@ -169,13 +173,16 @@ async function main() {
 
   // ── 1. Limpieza ──────────────────────────────────────────
   console.log('Limpiando operaciones…');
-  await prisma.$executeRawUnsafe(`TRUNCATE sale_return_items, sale_returns, transfer_items, transfers, inventory_adjustments,
+  await prisma.$executeRawUnsafe(`TRUNCATE route_stop_items, route_stops, delivery_routes, vehicles,
+    sale_return_items, sale_returns, transfer_items, transfers, inventory_adjustments,
     presale_items, presales, sale_lot_allocations, sale_items, payments, receivable_movements,
     sales, inventory_movements, inventory_balances, lot_prices, lots, reception_items, receptions, purchase_items, purchases,
     sync_operations, gps_positions, devices, customer_addresses, customers, audit_logs RESTART IDENTITY CASCADE`);
   await prisma.$executeRawUnsafe(`UPDATE document_sequences SET last_value = 0`);
+  // Los almacenes móviles se recrean con los vehículos.
+  await prisma.$executeRawUnsafe(`DELETE FROM warehouses WHERE type = 'VEHICLE'`);
   // Usuarios y tipos de cliente creados al probar (no los del seed) se retiran; ya no tienen operaciones asociadas.
-  await prisma.$executeRawUnsafe(`DELETE FROM users WHERE username NOT IN ('admin', 'vcentral', 'vsucursal', 'preventista', 'contador')`);
+  await prisma.$executeRawUnsafe(`DELETE FROM users WHERE username NOT IN ('admin', 'vcentral', 'vsucursal', 'preventista', 'contador', 'chofer')`);
   await prisma.$executeRawUnsafe(`DELETE FROM customer_types WHERE name NOT IN ('Tienda', 'Mercado', 'Mayorista', 'Persona particular', 'Otro')`);
   await prisma.$executeRawUnsafe(`UPDATE customer_types SET is_active = true`);
   await prisma.$executeRawUnsafe(`UPDATE users SET is_active = true`);
@@ -186,6 +193,7 @@ async function main() {
   // La sucursal pesa lo que recibe: así las transferencias muestran diferencias reales.
   await prisma.branch.update({ where: { code: 'SUC1' }, data: { transferWeighingEnabled: true } });
   const preseller = await login('preventista', 'Demo123!', 'mobile');
+  const driver = await login('chofer', 'Demo123!', 'mobile');
   const ADMIN_AUTH = { username: 'admin', password: 'Admin123!' };
 
   const products: any[] = await api('GET', '/products', admin);
@@ -220,6 +228,14 @@ async function main() {
   }
   await backdate(realStart, localTime(addDays(firstDay, -20), 9), localTime(addDays(firstDay, -2), 17));
   const typeOf = (c: any) => c.customerType.name as string;
+
+  // Flota: un vehículo propio y uno subcontratado.
+  const fleet: any[] = [
+    await api('POST', '/vehicles', admin, { plate: '3456-KTR', description: 'Toyota Hilux con furgón térmico', ownership: 'OWN', capacityKg: 1200, capacityCrates: 60 }),
+    await api('POST', '/vehicles', admin, { plate: '2817-PLD', description: 'Camión Hino 3 t', ownership: 'SUBCONTRACTED', ownerName: 'Transportes Ríos', capacityKg: 2500, capacityCrates: 120 }),
+  ];
+  const drivers: any[] = await api('GET', '/routes/drivers', admin);
+  const driverId = drivers.find((x) => x.username === 'chofer')!.id;
 
   // ── 3. Días ──────────────────────────────────────────────
   const costs = Object.fromEntries(Object.entries(PLAN).map(([code, p]) => [code, p.baseCost]));
@@ -270,16 +286,11 @@ async function main() {
       }
     }
 
-    // Preventas pendientes de días anteriores: el vendedor las atiende por la mañana.
-    for (const p of pendingPresales.splice(0)) {
-      try {
-        await sell(seller, { customer: p.customer, items: p.items, presaleId: p.id });
-        stats.attended++;
-      } catch (e) {
-        if (!(e instanceof ApiError)) throw e;
-        // Sin stock para despachar: Administración la cancela con su motivo (queda auditado).
-        await api('POST', `/presales/${p.id}/cancel`, admin, { reason: 'Sin stock suficiente al despachar; se avisó al cliente' });
-      }
+    // Preventas pendientes de días anteriores: salen en una ruta por la mañana y el chofer las entrega.
+    const toDeliver = pendingPresales.splice(0);
+    if (toDeliver.length) {
+      const retry = await runRoute({ admin, driver, driverId, vehicle: fleet[d % 2], day, presales: toDeliver, partial: isToday });
+      if (!isToday) pendingPresales.push(...retry);
     }
 
     // Ventas del día.
@@ -399,6 +410,7 @@ async function main() {
   console.log(`  ${stats.purchases} compras · ${stats.sales} ventas (${stats.credit} con crédito) · ${stats.presales} preventas (${stats.attended} atendidas, ${pendingNow} pendientes)`);
   console.log(`  Ventas confirmadas: Bs ${Number(revenue).toFixed(2)} · Por cobrar: Bs ${Number(debt).toFixed(2)} · Stock: ${Number(stock).toFixed(1)} kg`);
   console.log(`  ${stats.transfers} transferencias a la sucursal · ${stats.branchSales} ventas en sucursal`);
+  console.log(`  ${stats.routes} rutas de entrega · ${stats.failedStops} paradas no entregadas`);
   console.log(`  Líneas omitidas por falta de stock: ${stats.skippedLines}`);
   for (const e of stats.events) console.log(`  · ${e}`);
 }
@@ -444,16 +456,31 @@ async function annulOne(admin: string) {
   stats.events.push(`Venta ${sale.saleNumber} anulada (stock devuelto a sus lotes)`);
 }
 
+/** Producto entero con más stock vendible en el almacén (con al menos `minLots` lotes), para los eventos de la demo. */
+async function richestProduct(admin: string, byCode: any, wh: string, minLots = 1) {
+  let best: { product: any; lots: any[]; kg: number } | null = null;
+  for (const code of ['PE-SOF', 'PE-PIO', 'PE-GRA']) {
+    const lots: any[] = await api('GET', `/sales/available-lots?warehouseId=${wh}&productId=${byCode[code].id}`, admin);
+    const kg = lots.reduce((t, l) => t + Number(l.availableKg), 0);
+    if (lots.length >= minLots && (!best || kg > best.kg)) best = { product: byCode[code], lots, kg };
+  }
+  return best;
+}
+
 async function forcedLotSale(admin: string, customers: any[], byCode: any, wh: string) {
-  const lots: any[] = await api('GET', `/sales/available-lots?warehouseId=${wh}&productId=${byCode['PE-SOF'].id}`, admin);
-  if (lots.length < 2) return;
+  const best = await richestProduct(admin, byCode, wh, 2);
+  if (!best) {
+    stats.events.push('(sin generar) venta con lote forzado: ningún producto con dos lotes disponibles');
+    return;
+  }
+  const lots = best.lots;
   const newest = lots[lots.length - 1];
   const kg = Math.min(25, Number(newest.availableKg));
   const customer = customers.find((c) => c.name.startsWith('Restaurante'));
   const sale: any = await api('POST', '/sales', admin, {
     warehouseId: wh,
     customerId: customer.id,
-    items: [{ productId: byCode['PE-SOF'].id, weightKg: kg, lots: [{ lotId: newest.lotId, weightKg: kg }] }],
+    items: [{ productId: best.product.id, weightKg: kg, lots: [{ lotId: newest.lotId, weightKg: kg }] }],
     paymentMethod: 'QR',
     forceReason: 'El restaurante pidió pollo del ingreso de hoy para un evento',
   });
@@ -463,18 +490,26 @@ async function forcedLotSale(admin: string, customers: any[], byCode: any, wh: s
 
 async function priceChangeSale(admin: string, customers: any[], byCode: any, wh: string) {
   const customer = customers.find((c) => c.name.startsWith('Distribuidora'));
-  const base = { warehouseId: wh, customerId: customer.id, items: [{ productId: byCode['PE-SOF'].id, weightKg: 120 }], paymentMethod: 'TRANSFERENCIA' };
+  // Pedido grande por volumen: hasta 120 kg, según lo que haya de SOFIA.
+  const best = await richestProduct(admin, byCode, wh);
+  const weightKg = r3(Math.min(120, (best?.kg ?? 0) * 0.8));
+  if (!best || weightKg < 20) {
+    stats.events.push('(sin generar) venta con precio modificado: poco stock de pollo entero');
+    return;
+  }
+  const base = { warehouseId: wh, customerId: customer.id, items: [{ productId: best.product.id, weightKg }], paymentMethod: 'TRANSFERENCIA' };
   try {
     const quote: any = await api('POST', '/sales/quote', admin, base);
     const agreed = r2(Number(quote.lines[0].originalUnitPrice) - 0.6);
     const sale: any = await api('POST', '/sales', admin, {
       ...base,
-      items: [{ ...base.items[0], unitPrice: agreed, priceChangeReason: 'Precio acordado por volumen (120 kg)' }],
+      items: [{ ...base.items[0], unitPrice: agreed, priceChangeReason: `Precio acordado por volumen (${weightKg} kg)` }],
     });
     stats.sales++;
     stats.events.push(`Venta ${sale.saleNumber} con precio modificado a Bs ${agreed}/kg (precio original conservado)`);
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
+    stats.events.push(`(sin generar) venta con precio modificado: ${e.message}`);
   }
 }
 
@@ -484,18 +519,175 @@ async function creditException(seller: string, customers: any[], byCode: any, wh
   const target = rows.sort((a, b) => Number(b.currentDebt) / Number(b.creditLimit) - Number(a.currentDebt) / Number(a.creditLimit))[0];
   if (!target) return;
   const available = Number(target.creditLimit) - Number(target.currentDebt);
-  const kg = r3(Math.max(20, (available + 400) / 17));
-  const base = { warehouseId: wh, customerId: target.id, items: [{ productId: byCode['PE-SOF'].id, weightKg: kg }], paidAmount: 0, paymentMethod: 'EFECTIVO' };
+  const best = await richestProduct(seller, byCode, wh);
+  const kg = r3(Math.min(Math.max(20, (available + 400) / 15), (best?.kg ?? 0) * 0.9));
+  if (!best || kg < 5) {
+    stats.events.push('(sin generar) excepción de crédito: poco stock de pollo entero');
+    return;
+  }
+  const base = { warehouseId: wh, customerId: target.id, items: [{ productId: best.product.id, weightKg: kg }], paidAmount: 0, paymentMethod: 'EFECTIVO' };
   try {
     const quote: any = await api('POST', '/sales/quote', seller, base);
-    if (!quote.issues.some((i: any) => i.type === 'CREDIT_LIMIT')) return;
+    if (!quote.issues.some((i: any) => i.type === 'CREDIT_LIMIT')) {
+      stats.events.push(`(sin generar) excepción de crédito: ${target.name} no supera su límite`);
+      return;
+    }
     const sale: any = await api('POST', '/sales', seller, { ...base, authorization: auth, creditExceptionReason: 'Cliente frecuente; paga los viernes' });
     stats.sales++;
     stats.credit++;
     stats.events.push(`Venta ${sale.saleNumber} a ${target.name} superando el límite de crédito, autorizada por el administrador`);
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
+    stats.events.push(`(sin generar) excepción de crédito: ${e.message}`);
   }
+}
+
+// ── Rutas de entrega ────────────────────────────────────────
+
+/** Firma de demostración: un trazo a mano alzada dibujado en un PNG en escala de grises. */
+function signaturePng(): string {
+  const W = 240, H = 90;
+  const px = new Uint8Array(W * H).fill(255);
+  const dot = (x: number, y: number) => {
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      const xi = Math.round(x + dx), yi = Math.round(y + dy);
+      if (xi >= 0 && xi < W && yi >= 0 && yi < H) px[yi * W + xi] = 20;
+    }
+  };
+  const a = between(8, 16), f1 = between(0.05, 0.09), f2 = between(0.15, 0.3), phase = between(0, 6);
+  let prev: [number, number] | null = null;
+  for (let x = 15; x < W - 15; x += 0.5) {
+    const y = H / 2 + a * Math.sin(x * f1 + phase) + (a / 2) * Math.sin(x * f2) * Math.cos(x * 0.03);
+    if (prev) for (let t = 0; t <= 1; t += 0.25) dot(prev[0] + (x - prev[0]) * t, prev[1] + (y - prev[1]) * t);
+    prev = [x, y];
+  }
+  for (let x = 30; x < W - 40; x += 0.5) dot(x, H - 18 + Math.sin(x * 0.2)); // rúbrica
+  const raw = Buffer.alloc((W + 1) * H);
+  for (let y = 0; y < H; y++) {
+    raw[y * (W + 1)] = 0;
+    for (let x = 0; x < W; x++) raw[y * (W + 1) + 1 + x] = px[y * W + x];
+  }
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (buf: Buffer) => {
+    let c = 0xffffffff;
+    for (const b of buf) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]);
+    const c = Buffer.alloc(4);
+    c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(W, 0);
+  ihdr.writeUInt32BE(H, 4);
+  ihdr[8] = 8; // bits
+  ihdr[9] = 0; // escala de grises
+  const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
+const RECEIVERS = ['Doña Juana', 'Carmen Rojas', 'Don Pedro', 'Rosa Mamani', 'Encargado de cocina', 'Lucía Vaca', 'Mario Suárez', 'Elena Flores'];
+const op = (operationType: string, payload: unknown) => ({ deviceOperationId: randomUUID(), operationType, payload, createdAtDevice: new Date().toISOString() });
+
+/**
+ * Arma y despacha la ruta del día con las preventas pendientes; el chofer entrega desde el "teléfono"
+ * (misma sincronización que la app), con su recorrido GPS. Devuelve las preventas que no se entregaron.
+ * Con `partial` (hoy) entrega solo la primera mitad y deja la ruta en curso para la demo.
+ */
+async function runRoute(o: { admin: string; driver: string; driverId: string; vehicle: any; day: string; presales: { id: string; customer: any }[]; partial: boolean }) {
+  // Solo salen los pedidos que el stock vendible del central puede cubrir; los demás se cancelan con aviso.
+  const centralId = (await prisma.warehouse.findFirstOrThrow({ where: { code: 'ALM-CEN' } })).id;
+  const lots: any[] = await api('GET', `/inventory/lots?warehouseId=${centralId}`, o.admin);
+  const stock = new Map<string, number>();
+  for (const l of lots.filter((x) => !x.expired)) stock.set(l.product.id, (stock.get(l.product.id) ?? 0) + Number(l.weightKg));
+  const fits: typeof o.presales = [];
+  for (const p of o.presales) {
+    const detail: any = await api('GET', `/presales/${p.id}`, o.admin);
+    if (detail.items.every((i: any) => Number(i.weightKg) <= (stock.get(i.productId) ?? 0))) {
+      for (const i of detail.items) stock.set(i.productId, stock.get(i.productId)! - Number(i.weightKg));
+      fits.push(p);
+    } else {
+      await api('POST', `/presales/${p.id}/cancel`, o.admin, { reason: 'Sin stock suficiente al despachar; se avisó al cliente' });
+    }
+  }
+  if (!fits.length) return [];
+  let route: any = await api('POST', '/routes', o.admin, { routeDate: o.day, vehicleId: o.vehicle.id, driverId: o.driverId, stops: fits.map((p) => ({ presaleId: p.id })) });
+  // Un pequeño margen sobre lo pedido (los pollos se pesan al entregar), si hay stock.
+  route = await api('POST', `/routes/${route.id}/dispatch`, o.admin, {
+    loads: route.loadSheet.map((l: any) => ({ productId: l.productId, weightKg: r3(Number(l.orderedKg) + Math.min(Number(l.orderedKg) * 0.03, Math.max(0, stock.get(l.productId) ?? 0))) })),
+  });
+  stats.routes++;
+  const retry: { id: string; customer: any; items: any[] }[] = [];
+  const stops: any[] = route.stops;
+  const upto = o.partial ? Math.ceil(stops.length / 2) : stops.length;
+  let pos: [number, number] = [-17.7833 + between(-0.004, 0.004), -63.1821 + between(-0.004, 0.004)]; // sale del almacén central
+  for (const stop of stops.slice(0, upto)) {
+    const target: [number, number] = [Number(stop.address?.latitude ?? pos[0]), Number(stop.address?.longitude ?? pos[1])];
+    // Trayecto con algunas posiciones intermedias (el teléfono registra cada ~10 min).
+    const gps = [] as any[];
+    for (let k = 1; k <= 3; k++) {
+      const t = k / 4;
+      gps.push(op('GPS_POSITION', { latitude: pos[0] + (target[0] - pos[0]) * t + between(-0.001, 0.001), longitude: pos[1] + (target[1] - pos[1]) * t + between(-0.001, 0.001), accuracyMeters: r2(between(5, 18)), eventType: 'PERIODIC' }));
+    }
+    pos = target;
+    const at = { latitude: target[0] + between(-0.0003, 0.0003), longitude: target[1] + between(-0.0003, 0.0003) };
+    gps.push(op('GPS_POSITION', { ...at, accuracyMeters: r2(between(4, 10)), eventType: 'DELIVERY', referenceId: stop.id }));
+
+    let delivery: any;
+    if (rand() < 0.08) {
+      delivery = op('DELIVERY_FAIL', { stopId: stop.id, problemType: weighted([['CLOSED', 3], ['NOT_FOUND', 2], ['NO_PAYMENT', 1]]), notes: 'El cliente avisó que pase mañana', ...at });
+      stats.failedStops++;
+      retry.push({ id: stop.presaleId, customer: stop.customer, items: [] });
+    } else {
+      // Peso real al entregar: el pollo entero rara vez pesa exactamente lo pedido.
+      const items = stop.items.map((i: any) => {
+        const ordered = Number(i.orderedWeightKg);
+        const differs = i.product.code.startsWith('PE') && rand() < 0.35;
+        const delivered = differs ? r3(ordered * between(0.97, 1.02)) : ordered;
+        return { productId: i.product.id, deliveredWeightKg: delivered, differenceReason: differs ? 'Peso real al entregar' : undefined };
+      });
+      const quote: any = await api('POST', '/sales/quote', o.admin, {
+        warehouseId: o.vehicle.warehouseId, customerId: stop.customer.id, items: items.map((i: any) => ({ productId: i.productId, weightKg: i.deliveredWeightKg })), paymentMethod: 'EFECTIVO',
+      });
+      const total = Number(quote.total);
+      const r = rand();
+      const paid = stop.customer.creditEnabled ? (r < 0.4 ? 0 : r < 0.55 ? r2(total * 0.5) : total) : total;
+      delivery = op('DELIVERY_COMPLETE', {
+        stopId: stop.id, items, paidAmount: paid, paymentMethod: paid > 0 ? weighted([['EFECTIVO', 7], ['QR', 3]]) : undefined,
+        receivedByName: pick(RECEIVERS), signature: signaturePng(), ...at,
+      });
+    }
+    const results: any[] = (await api<any>('POST', '/mobile/sync', o.driver, { deviceUuid: 'demo-chofer-android', appVersion: '0.2.0', operations: [...gps, delivery] })).results;
+    const last = results[results.length - 1];
+    if (last.status !== 'SYNCED') {
+      // Rechazada (p. ej. excede el crédito sin autorización): Administración la registra como no entregada.
+      await api('POST', `/routes/stops/${stop.id}/fail`, o.admin, { problemType: 'NO_PAYMENT', notes: `No se pudo registrar: ${last.error}` });
+      retry.push({ id: stop.presaleId, customer: stop.customer, items: [] });
+      stats.failedStops++;
+    } else if (delivery.operationType === 'DELIVERY_COMPLETE') {
+      stats.attended++;
+      stats.sales++;
+    }
+  }
+  if (!o.partial) {
+    // Liquidación: a veces falta un poco al pesar el sobrante.
+    const veh: any[] = await api('GET', `/inventory/lots?warehouseId=${o.vehicle.warehouseId}`, o.admin);
+    await api('POST', `/routes/${route.id}/close`, o.admin, {
+      returns: veh.map((l, idx) => ({ lotId: l.lotId, receivedWeightKg: idx === 0 && rand() < 0.3 ? r3(Math.max(0, Number(l.weightKg) - between(0.1, 0.4))) : Number(l.weightKg) })),
+      notes: 'Sobrante pesado al volver',
+    });
+  } else {
+    stats.events.push(`Ruta ${route.routeNumber} en curso: ${upto} de ${stops.length} paradas entregadas (el resto, pendiente para la demo)`);
+  }
+  return retry;
 }
 
 // ── Sucursal e inventario operativo ─────────────────────────
@@ -532,7 +724,7 @@ async function supplyBranch(seller: string, branchSeller: string, from: string, 
   await api('POST', `/transfers/${transfer.id}/receive`, branchSeller, {
     items: transfer.items.map((i: any, idx: number) => ({
       itemId: i.id,
-      receivedWeightKg: short && idx === 0 ? r3(Number(i.sentWeightKg) - between(0.2, 0.7)) : Number(i.sentWeightKg),
+      receivedWeightKg: short && idx === 0 ? r3(Math.max(0, Number(i.sentWeightKg) - between(0.2, 0.7))) : Number(i.sentWeightKg),
     })),
     notes: short ? 'Goteo en el viaje' : undefined,
   });

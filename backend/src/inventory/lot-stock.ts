@@ -12,9 +12,9 @@ export function todayLocal() {
 
 /**
  * Lotes con saldo del producto en el almacén, activos y no vencidos, en orden FEFO.
- * Con `lock` bloquea las filas de saldo hasta el fin de la transacción.
+ * Con `lock` bloquea las filas de saldo hasta el fin de la transacción; `includeExpired` incluye vencidos (devolver sobrantes).
  */
-export async function availableLots(db: Db, warehouseId: string, productId: string, lock: boolean): Promise<AvailableLot[]> {
+export async function availableLots(db: Db, warehouseId: string, productId: string, lock: boolean, includeExpired = false): Promise<AvailableLot[]> {
   const rows = await db.$queryRaw<
     { lot_id: string; lot_code: string; expiry_date: Date; weight_kg: Prisma.Decimal; actual_cost_per_kg: Prisma.Decimal }[]
   >`
@@ -25,7 +25,7 @@ export async function availableLots(db: Db, warehouseId: string, productId: stri
       AND ib.product_id = ${productId}::uuid
       AND ib.weight_kg > 0
       AND l.status = 'ACTIVE'
-      AND l.expiry_date >= ${todayLocal()}::date
+      AND (${includeExpired} OR l.expiry_date >= ${todayLocal()}::date)
     ORDER BY l.expiry_date ASC, l.created_at ASC
     ${lock ? Prisma.sql`FOR UPDATE OF ib` : Prisma.empty}`;
   return rows.map((r) => ({

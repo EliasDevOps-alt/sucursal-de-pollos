@@ -1,6 +1,7 @@
 // Payloads de cada tipo de operación offline. Se validan uno por uno al sincronizar,
 // para que un dato inválido marque solo esa operación con error y no bloquee las demás.
 import { plainToInstance, Type } from 'class-transformer';
+import { DeliverStopDto, FailStopDto } from '../../logistics/dto/logistics.dto';
 import {
   ArrayMinSize,
   IsArray,
@@ -198,12 +199,22 @@ export class GpsPositionPayload {
   @Min(0)
   accuracyMeters?: number;
 
-  @IsIn(['PERIODIC', 'PRESALE', 'CUSTOMER_CREATE', 'VISIT'])
+  @IsIn(['PERIODIC', 'PRESALE', 'CUSTOMER_CREATE', 'VISIT', 'DELIVERY', 'DELIVERY_FAIL'])
   eventType: string;
 
   @IsOptional()
   @IsUUID()
   referenceId?: string;
+}
+
+export class DeliveryCompletePayload extends DeliverStopDto {
+  @IsUUID()
+  stopId: string;
+}
+
+export class DeliveryFailPayload extends FailStopDto {
+  @IsUUID()
+  stopId: string;
 }
 
 /** Convierte y valida; devuelve la instancia o lanza un Error con los mensajes legibles. */

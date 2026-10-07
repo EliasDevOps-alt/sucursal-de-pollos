@@ -624,3 +624,111 @@ export interface Branch {
   code: string;
   name: string;
 }
+
+// ── Logística ──────────────────────────────────────────────
+export interface Vehicle {
+  id: string;
+  plate: string;
+  description: string;
+  ownership: 'OWN' | 'SUBCONTRACTED';
+  ownerName: string | null;
+  capacityKg: Dec;
+  capacityCrates: number;
+  warehouseId: string;
+  isActive: boolean;
+  activeRoutes?: { id: string; routeNumber: string; routeDate: string; status: RouteStatus }[];
+}
+
+export type RouteStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type StopStatus = 'PENDING' | 'DELIVERED' | 'PARTIAL' | 'FAILED';
+
+export interface RouteSummary {
+  stops: number;
+  delivered: number;
+  failed: number;
+  pending?: number;
+  orderedKg: Dec;
+  estimatedCrates?: number;
+  orderedAmount: Dec;
+  soldAmount?: Dec;
+  collectedAmount?: Dec;
+  creditAmount?: Dec;
+}
+
+export interface RouteListItem {
+  id: string;
+  routeNumber: string;
+  routeDate: string;
+  status: RouteStatus;
+  notes: string | null;
+  vehicle: { id: string; plate: string; description: string };
+  driver: { id: string; fullName: string };
+  summary: RouteSummary;
+}
+
+export interface RouteStop {
+  id: string;
+  sequence: number;
+  status: StopStatus;
+  presaleId: string;
+  customer: { id: string; code: string; name: string; phone: string | null; creditEnabled: boolean; creditLimit: Dec; currentDebt: Dec };
+  address: { id: string; label: string; address: string; latitude: Dec | null; longitude: Dec | null } | null;
+  presale: { id: string; presaleNumber: string; totalAmount: Dec; notes: string | null; preventista: { fullName: string } };
+  sale: { id: string; saleNumber: string; totalAmount: Dec; paidAmount: Dec; creditAmount: Dec; paymentStatus: string; creditExceptionReason: string | null } | null;
+  creditAuthorizedBy: { fullName: string } | null;
+  creditAuthReason: string | null;
+  receivedByName: string | null;
+  signature: string | null;
+  paidAmount: Dec;
+  paymentMethod: string | null;
+  problemType: string | null;
+  notes: string | null;
+  latitude: Dec | null;
+  longitude: Dec | null;
+  resolvedAtDevice: string | null;
+  recordedBy: { fullName: string } | null;
+  items: { id: string; product: Ref; orderedWeightKg: Dec; deliveredWeightKg: Dec | null; differenceReason: string | null }[];
+}
+
+export interface LoadSheetRow {
+  productId: string;
+  name: string;
+  orderedKg: Dec;
+  loadedKg: Dec;
+  deliveredKg: Dec;
+  returnedKg: Dec;
+  lossKg: Dec;
+  onBoardKg: Dec;
+}
+
+export interface RouteDetail extends Omit<RouteListItem, 'summary' | 'vehicle'> {
+  vehicle: Vehicle;
+  originWarehouse: { id: string; code: string; name: string };
+  createdBy: { fullName: string };
+  dispatchedBy: { fullName: string } | null;
+  dispatchedAt: string | null;
+  closedBy: { fullName: string } | null;
+  closedAt: string | null;
+  closeNotes: string | null;
+  cancelledBy: { fullName: string } | null;
+  cancelReason: string | null;
+  createdAt: string;
+  stops: RouteStop[];
+  loadSheet: LoadSheetRow[];
+  summary: Required<RouteSummary>;
+}
+
+export interface RouteCandidate {
+  id: string;
+  presaleNumber: string;
+  scheduledDeliveryDate: string | null;
+  totalAmount: Dec;
+  notes: string | null;
+  customer: { id: string; code: string; name: string };
+  address: { label: string; address: string; latitude: Dec | null; longitude: Dec | null } | null;
+  preventista: { fullName: string };
+  weightKg: Dec;
+  items: { productId: string; productName: string; weightKg: Dec }[];
+  creditAvailable: Dec;
+  creditWouldExceed: boolean;
+}

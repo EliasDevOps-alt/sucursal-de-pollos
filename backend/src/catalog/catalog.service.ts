@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, WarehouseType } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -83,9 +83,10 @@ export class CatalogService {
     return this.prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } });
   }
 
-  listWarehouses() {
+  /** Los almacenes móviles de los vehículos solo se listan si se piden (no se vende ni se transfiere a mano hacia ellos). */
+  listWarehouses(includeVehicles = false) {
     return this.prisma.warehouse.findMany({
-      where: { isActive: true },
+      where: { isActive: true, type: includeVehicles ? undefined : { not: WarehouseType.VEHICLE } },
       include: { branch: { select: { id: true, code: true, name: true } } },
       orderBy: { name: 'asc' },
     });

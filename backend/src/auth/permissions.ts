@@ -43,6 +43,10 @@ export const PERMISSIONS = {
   PRESALES_CREATE: 'presales.create',
   PRESALES_MANAGE: 'presales.manage',
   SYNC_PUSH: 'sync.push',
+  // Logística
+  ROUTES_VIEW: 'routes.view',
+  ROUTES_MANAGE: 'routes.manage',
+  DELIVERIES_REGISTER: 'deliveries.register',
   // Reportes
   REPORTS_VIEW: 'reports.view',
   REPORTS_FINANCIAL: 'reports.financial',
@@ -84,6 +88,9 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
   'presales.create': 'Registrar preventas',
   'presales.manage': 'Confirmar, modificar o cancelar preventas',
   'sync.push': 'Sincronizar operaciones desde el móvil',
+  'routes.view': 'Ver vehículos, rutas y entregas',
+  'routes.manage': 'Gestionar vehículos; planificar, despachar y cerrar rutas',
+  'deliveries.register': 'Registrar entregas en ruta',
   'reports.view': 'Ver reportes operativos y dashboard',
   'reports.financial': 'Ver reportes de rentabilidad y financieros',
 };
@@ -99,7 +106,7 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
       P.CATALOG_VIEW, P.LOTS_VIEW, P.INVENTORY_VIEW, P.TRANSFERS_CREATE, P.TRANSFERS_RECEIVE,
       P.CUSTOMERS_VIEW, P.CUSTOMERS_MANAGE,
       P.SALES_VIEW, P.SALES_CREATE, P.PRESALES_VIEW_ALL,
-      P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE,
+      P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE, P.ROUTES_VIEW, P.ROUTES_MANAGE,
     ],
   },
   {
@@ -120,14 +127,14 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
       P.PRESALES_VIEW_OWN, P.PRESALES_CREATE, P.SYNC_PUSH,
     ],
   },
-  { code: 'DRIVER', name: 'Chofer', permissions: [P.CATALOG_VIEW, P.CUSTOMERS_VIEW, P.SYNC_PUSH] },
+  { code: 'DRIVER', name: 'Chofer', permissions: [P.CATALOG_VIEW, P.CUSTOMERS_VIEW, P.SYNC_PUSH, P.DELIVERIES_REGISTER] },
   { code: 'COLLECTOR', name: 'Cobrador', permissions: [P.CUSTOMERS_VIEW, P.SYNC_PUSH, P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE] },
   {
     code: 'ACCOUNTANT',
     name: 'Contador',
     permissions: [
       P.PURCHASES_VIEW, P.SALES_VIEW, P.INVENTORY_VIEW, P.LOTS_VIEW,
-      P.REPORTS_VIEW, P.REPORTS_FINANCIAL, P.AUDIT_VIEW, P.COLLECTIONS_VIEW,
+      P.REPORTS_VIEW, P.REPORTS_FINANCIAL, P.AUDIT_VIEW, P.COLLECTIONS_VIEW, P.ROUTES_VIEW,
     ],
   },
 ];

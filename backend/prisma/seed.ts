@@ -68,6 +68,7 @@ async function seedUsers(branch1Id: string) {
     { username: 'vsucursal', password: 'Demo123!', fullName: 'Vendedor Sucursal Demo', role: 'SELLER_BRANCH', branchId: branch1Id },
     { username: 'preventista', password: 'Demo123!', fullName: 'Preventista Demo', role: 'PRESELLER' },
     { username: 'contador', password: 'Demo123!', fullName: 'Contador Demo', role: 'ACCOUNTANT' },
+    { username: 'chofer', password: 'Demo123!', fullName: 'Chofer Demo', role: 'DRIVER' },
   ];
 
   for (const u of users) {
@@ -148,6 +149,7 @@ async function seedCatalogs() {
     { name: 'transfer', prefix: 'TR-' },
     { name: 'adjustment', prefix: 'AJ-' },
     { name: 'return', prefix: 'DV-' },
+    { name: 'route', prefix: 'RT-' },
   ];
   for (const s of sequences) {
     await prisma.documentSequence.upsert({ where: { name: s.name }, update: {}, create: s });

@@ -1,10 +1,13 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Las entregas del chofer llevan la firma como imagen: se amplía el límite del cuerpo JSON (por defecto 100 kB).
+  app.useBodyParser('json', { limit: '5mb' });
 
   app.setGlobalPrefix('api');
   app.enableCors({

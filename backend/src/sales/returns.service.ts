@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { InventoryMovementType, Prisma, ReceivableMovementType, RefundMethod, ReturnDisposition, SaleStatus } from '@prisma/client';
+import { InventoryMovementType, Prisma, ReceivableMovementType, RefundMethod, ReturnDisposition, SaleStatus, WarehouseType } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { AuthUser } from '../auth/auth-user';
@@ -64,10 +64,13 @@ export class ReturnsService {
       const sale = await tx.sale.findUniqueOrThrow({
         where: { id: saleId },
         include: {
-          warehouse: { select: { branchId: true } },
+          warehouse: { select: { branchId: true, type: true } },
+          routeStop: { select: { route: { select: { originWarehouseId: true } } } },
           items: { include: { product: { select: { name: true } }, allocations: { orderBy: { createdAt: 'asc' } } } },
         },
       });
+      // Lo entregado en ruta salió del almacén móvil del vehículo: lo devuelto reingresa al almacén de donde se cargó.
+      const restockWarehouseId = sale.warehouse.type === WarehouseType.VEHICLE && sale.routeStop ? sale.routeStop.route.originWarehouseId : sale.warehouseId;
       if (actor.branchId && sale.warehouse.branchId !== actor.branchId) {
         throw new ForbiddenException('Solo puede registrar devoluciones de ventas de su sucursal');
       }
@@ -89,7 +92,7 @@ export class ReturnsService {
           returnNumber,
           saleId,
           customerId: sale.customerId,
-          warehouseId: sale.warehouseId,
+          warehouseId: restockWarehouseId,
           reason: dto.reason.trim(),
           refundMethod,
           totalAmount: 0,
@@ -144,7 +147,7 @@ export class ReturnsService {
           if (restock) {
             a.restockedWeightKg = kg(a.restockedWeightKg.plus(take));
             await this.inventory.registerMovement(tx, {
-              warehouseId: sale.warehouseId,
+              warehouseId: restockWarehouseId,
               productId: item.productId,
               lotId: a.lotId,
               movementType: InventoryMovementType.RETURN,

@@ -23,6 +23,7 @@ datasource db {
 enum WarehouseType {
   CENTRAL
   BRANCH
+  VEHICLE // almacén móvil: lo cargado en un vehículo durante una ruta
 }
 
 enum SaleUnit {
@@ -165,6 +166,36 @@ enum RefundMethod {
   CASH // se devuelve el dinero en caja
 }
 
+enum VehicleOwnership {
+  OWN
+  SUBCONTRACTED
+}
+
+enum RouteStatus {
+  PLANNED // en armado: se pueden agregar, quitar y ordenar paradas
+  IN_PROGRESS // despachada: carga hecha, ruta fija
+  COMPLETED // liquidada: sobrantes devueltos al almacén
+  CANCELLED
+}
+
+enum StopStatus {
+  PENDING
+  DELIVERED // entregado completo
+  PARTIAL // entregado con diferencias
+  FAILED // no entregado (con motivo)
+}
+
+enum DeliveryProblem {
+  CLOSED // local cerrado
+  NOT_FOUND // no se encontró al cliente o al responsable
+  REJECTED // el cliente rechazó el pedido
+  NO_PAYMENT // no tenía con qué pagar
+  WRONG_ADDRESS
+  DAMAGED // producto dañado en el camino
+  NOT_VISITED // no se llegó a visitar
+  OTHER
+}
+
 // ─────────────────────────────────────────────────────────────
 // Seguridad y usuarios
 // ─────────────────────────────────────────────────────────────
@@ -248,6 +279,13 @@ model User {
   adjustmentsAnnulled  InventoryAdjustment[] @relation("AdjustmentAnnulledBy")
   returnsCreated       SaleReturn[]          @relation("ReturnCreatedBy")
   returnsAuthorized    SaleReturn[]          @relation("ReturnAuthorizedBy")
+  routesDriven         DeliveryRoute[]       @relation("RouteDriver")
+  routesCreated        DeliveryRoute[]       @relation("RouteCreatedBy")
+  routesDispatched     DeliveryRoute[]       @relation("RouteDispatchedBy")
+  routesClosed         DeliveryRoute[]       @relation("RouteClosedBy")
+  routesCancelled      DeliveryRoute[]       @relation("RouteCancelledBy")
+  stopsRecorded        RouteStop[]           @relation("StopRecordedBy")
+  stopCreditApprovals  RouteStop[]           @relation("StopCreditAuthorizedBy")
 
   @@map("users")
 }
@@ -326,6 +364,8 @@ model Warehouse {
   transfersIn        Transfer[]            @relation("TransferDestination")
   adjustments        InventoryAdjustment[]
   returns            SaleReturn[]
+  vehicle            Vehicle?
+  routesFrom         DeliveryRoute[]
 
   @@map("warehouses")
 }
@@ -368,6 +408,7 @@ model Product {
   transferItems      TransferItem[]
   adjustments        InventoryAdjustment[]
   returnItems        SaleReturnItem[]
+  routeStopItems     RouteStopItem[]
 
   @@map("products")
 }
@@ -637,6 +678,7 @@ model Customer {
   receivableMovements ReceivableMovement[]
   visits              Visit[]
   returns             SaleReturn[]
+  routeStops          RouteStop[]
 
   @@map("customers")
 }
@@ -654,9 +696,10 @@ model CustomerAddress {
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  customer   Customer  @relation(fields: [customerId], references: [id])
-  capturedBy User?     @relation(fields: [capturedById], references: [id])
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  capturedBy User?       @relation(fields: [capturedById], references: [id])
   presales   Presale[]
+  routeStops RouteStop[]
 
   @@map("customer_addresses")
 }
@@ -700,6 +743,7 @@ model Sale {
   presale            Presale?
   payments           Payment[]
   returns            SaleReturn[]
+  routeStop          RouteStop?
 
   @@index([customerId, createdAt])
   @@index([createdAt])
@@ -781,6 +825,7 @@ model Presale {
   preventista User             @relation(fields: [preventistaId], references: [id])
   sale        Sale?            @relation(fields: [saleId], references: [id])
   items       PresaleItem[]
+  routeStops  RouteStop[]
 
   @@index([preventistaId, status, scheduledDeliveryDate])
   @@map("presales")
@@ -967,6 +1012,8 @@ model Transfer {
   receivedBy  User?          @relation("TransferReceivedBy", fields: [receivedById], references: [id])
   cancelledBy User?          @relation("TransferCancelledBy", fields: [cancelledById], references: [id])
   items       TransferItem[]
+  routeLoad   DeliveryRoute? @relation("RouteLoadTransfer")
+  routeReturn DeliveryRoute? @relation("RouteReturnTransfer")
 
   @@index([status, sentAt])
   @@map("transfers")
@@ -1070,4 +1117,119 @@ model SaleReturnItem {
   lot        Lot               @relation(fields: [lotId], references: [id])
 
   @@map("sale_return_items")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Logística: vehículos, rutas y entregas
+// ─────────────────────────────────────────────────────────────
+
+model Vehicle {
+  id             String           @id @default(uuid()) @db.Uuid
+  plate          String           @unique
+  description    String
+  ownership      VehicleOwnership
+  ownerName      String?          @map("owner_name") // empresa o dueño si es subcontratado
+  capacityKg     Decimal          @map("capacity_kg") @db.Decimal(14, 3)
+  capacityCrates Int              @map("capacity_crates")
+  warehouseId    String           @unique @map("warehouse_id") @db.Uuid // almacén móvil del vehículo
+  isActive       Boolean          @default(true) @map("is_active")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
+  routes    DeliveryRoute[]
+
+  @@map("vehicles")
+}
+
+model DeliveryRoute {
+  id                String      @id @default(uuid()) @db.Uuid
+  routeNumber       String      @unique @map("route_number")
+  routeDate         DateTime    @map("route_date") @db.Date
+  vehicleId         String      @map("vehicle_id") @db.Uuid
+  driverId          String      @map("driver_id") @db.Uuid
+  originWarehouseId String      @map("origin_warehouse_id") @db.Uuid
+  status            RouteStatus @default(PLANNED)
+  notes             String?
+  loadTransferId    String?     @unique @map("load_transfer_id") @db.Uuid // carga: origen → vehículo
+  returnTransferId  String?     @unique @map("return_transfer_id") @db.Uuid // sobrantes: vehículo → origen
+  createdById       String      @map("created_by_id") @db.Uuid
+  createdAt         DateTime    @default(now()) @map("created_at")
+  dispatchedById    String?     @map("dispatched_by_id") @db.Uuid
+  dispatchedAt      DateTime?   @map("dispatched_at")
+  closedById        String?     @map("closed_by_id") @db.Uuid
+  closedAt          DateTime?   @map("closed_at")
+  closeNotes        String?     @map("close_notes")
+  cancelledById     String?     @map("cancelled_by_id") @db.Uuid
+  cancelledAt       DateTime?   @map("cancelled_at")
+  cancelReason      String?     @map("cancel_reason")
+
+  vehicle         Vehicle     @relation(fields: [vehicleId], references: [id])
+  driver          User        @relation("RouteDriver", fields: [driverId], references: [id])
+  originWarehouse Warehouse   @relation(fields: [originWarehouseId], references: [id])
+  createdBy       User        @relation("RouteCreatedBy", fields: [createdById], references: [id])
+  dispatchedBy    User?       @relation("RouteDispatchedBy", fields: [dispatchedById], references: [id])
+  closedBy        User?       @relation("RouteClosedBy", fields: [closedById], references: [id])
+  cancelledBy     User?       @relation("RouteCancelledBy", fields: [cancelledById], references: [id])
+  loadTransfer    Transfer?   @relation("RouteLoadTransfer", fields: [loadTransferId], references: [id])
+  returnTransfer  Transfer?   @relation("RouteReturnTransfer", fields: [returnTransferId], references: [id])
+  stops           RouteStop[]
+
+  @@index([routeDate, status])
+  @@index([driverId, status])
+  @@map("delivery_routes")
+}
+
+model RouteStop {
+  id                   String           @id @default(uuid()) @db.Uuid
+  routeId              String           @map("route_id") @db.Uuid
+  sequence             Int
+  presaleId            String           @map("presale_id") @db.Uuid
+  customerId           String           @map("customer_id") @db.Uuid
+  addressId            String?          @map("address_id") @db.Uuid
+  status               StopStatus       @default(PENDING)
+  // Excepción de crédito autorizada al planificar (el chofer no puede pedirla en la calle).
+  creditAuthorizedById String?          @map("credit_authorized_by_id") @db.Uuid
+  creditAuthReason     String?          @map("credit_auth_reason")
+  saleId               String?          @unique @map("sale_id") @db.Uuid
+  receivedByName       String?          @map("received_by_name")
+  signature            String? // imagen PNG de la firma (data URL)
+  paidAmount           Decimal          @default(0) @map("paid_amount") @db.Decimal(14, 2)
+  paymentMethod        String?          @map("payment_method")
+  problemType          DeliveryProblem? @map("problem_type")
+  notes                String?
+  latitude             Decimal?         @db.Decimal(10, 7)
+  longitude            Decimal?         @db.Decimal(10, 7)
+  resolvedAtDevice     DateTime?        @map("resolved_at_device")
+  resolvedAt           DateTime?        @map("resolved_at")
+  recordedById         String?          @map("recorded_by_id") @db.Uuid
+  deviceOperationId    String?          @unique @map("device_operation_id") @db.Uuid
+
+  route              DeliveryRoute    @relation(fields: [routeId], references: [id])
+  presale            Presale          @relation(fields: [presaleId], references: [id])
+  customer           Customer         @relation(fields: [customerId], references: [id])
+  address            CustomerAddress? @relation(fields: [addressId], references: [id])
+  sale               Sale?            @relation(fields: [saleId], references: [id])
+  creditAuthorizedBy User?            @relation("StopCreditAuthorizedBy", fields: [creditAuthorizedById], references: [id])
+  recordedBy         User?            @relation("StopRecordedBy", fields: [recordedById], references: [id])
+  items              RouteStopItem[]
+
+  @@index([routeId, sequence])
+  @@index([presaleId])
+  @@map("route_stops")
+}
+
+model RouteStopItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  stopId            String   @map("stop_id") @db.Uuid
+  productId         String   @map("product_id") @db.Uuid
+  orderedWeightKg   Decimal  @map("ordered_weight_kg") @db.Decimal(14, 3)
+  orderedQuantity   Decimal  @default(0) @map("ordered_quantity") @db.Decimal(14, 3)
+  deliveredWeightKg Decimal? @map("delivered_weight_kg") @db.Decimal(14, 3)
+  differenceReason  String?  @map("difference_reason")
+
+  stop    RouteStop @relation(fields: [stopId], references: [id])
+  product Product   @relation(fields: [productId], references: [id])
+
+  @@map("route_stop_items")
 }

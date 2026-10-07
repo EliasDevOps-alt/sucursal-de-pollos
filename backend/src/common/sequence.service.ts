@@ -1,7 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-export type SequenceName = 'purchase' | 'sale' | 'presale' | 'lot' | 'customer' | 'collection' | 'transfer' | 'adjustment' | 'return';
+export type SequenceName = 'purchase' | 'sale' | 'presale' | 'lot' | 'customer' | 'collection' | 'transfer' | 'adjustment' | 'return' | 'route';
 
 @Injectable()
 export class SequenceService {

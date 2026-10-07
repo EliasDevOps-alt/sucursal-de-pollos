@@ -86,7 +86,8 @@ export class CatalogController {
 
   @Get('warehouses')
   @RequirePermissions(CATALOG_VIEW)
-  listWarehouses() {
-    return this.catalog.listWarehouses();
+  @ApiQuery({ name: 'includeVehicles', required: false, description: 'true para incluir los almacenes móviles de los vehículos' })
+  listWarehouses(@Query('includeVehicles') includeVehicles?: string) {
+    return this.catalog.listWarehouses(includeVehicles === 'true');
   }
 }

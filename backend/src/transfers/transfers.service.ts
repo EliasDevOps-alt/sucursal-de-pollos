@@ -64,154 +64,160 @@ export class TransfersService {
   }
 
   async create(dto: CreateTransferDto, actor: AuthUser) {
-    if (dto.originWarehouseId === dto.destinationWarehouseId) throw new BadRequestException('El origen y el destino deben ser distintos');
-    const id = await this.prisma.$transaction(async (tx) => {
-      const [origin, destination] = await Promise.all([
-        tx.warehouse.findFirst({ where: { id: dto.originWarehouseId, isActive: true } }),
-        tx.warehouse.findFirst({ where: { id: dto.destinationWarehouseId, isActive: true } }),
-      ]);
-      if (!origin) throw new BadRequestException('Almacén de origen inexistente o inactivo');
-      if (!destination) throw new BadRequestException('Almacén de destino inexistente o inactivo');
-      if (actor.branchId && origin.branchId !== actor.branchId) {
-        throw new ForbiddenException('Solo puede enviar desde el almacén de su sucursal');
-      }
-
-      const transferNumber = await this.sequences.next(tx, 'transfer');
-      const transfer = await tx.transfer.create({
-        data: {
-          transferNumber,
-          originWarehouseId: origin.id,
-          destinationWarehouseId: destination.id,
-          notes: dto.notes,
-          sentById: actor.id,
-        },
-      });
-
-      // Cada línea lee los saldos ya descontados por las anteriores (misma transacción), así un producto repetido no se envía dos veces.
-      for (const item of dto.items) {
-        const product = await tx.product.findFirst({ where: { id: item.productId, isActive: true } });
-        if (!product) throw new BadRequestException('Producto inexistente o inactivo');
-        const lots = await availableLots(tx, origin.id, product.id, true);
-        let allocations: Allocation[];
-        try {
-          allocations = item.lotId
-            ? allocateManual(lots, item.weightKg, [{ lotId: item.lotId, weightKg: item.weightKg }])
-            : allocateFefo(lots, item.weightKg);
-        } catch (e) {
-          if (e instanceof AllocationError) throw new BadRequestException(`${product.name}: ${e.message}`);
-          throw e;
-        }
-        for (const a of allocations) {
-          const share = allocations.length === 1 ? D(item.quantity ?? 0) : ZERO;
-          await tx.transferItem.create({
-            data: {
-              transferId: transfer.id,
-              productId: product.id,
-              lotId: a.lot.lotId,
-              sentWeightKg: a.weightKg,
-              sentQuantity: share,
-              costPerKg: a.lot.costPerKg,
-            },
-          });
-          await this.inventory.registerMovement(tx, {
-            warehouseId: origin.id,
-            productId: product.id,
-            lotId: a.lot.lotId,
-            movementType: InventoryMovementType.TRANSFER_OUT,
-            weightKg: a.weightKg.negated(),
-            unitCostPerKg: a.lot.costPerKg,
-            referenceType: 'transfer',
-            referenceId: transfer.id,
-            reason: `Envío a ${destination.name}`,
-            createdById: actor.id,
-          });
-        }
-      }
-
-      await this.audit.log(
-        {
-          userId: actor.id,
-          action: 'transfers.create',
-          entityType: 'transfer',
-          entityId: transfer.id,
-          newData: { transferNumber, origin: origin.code, destination: destination.code, items: dto.items },
-        },
-        tx,
-      );
-      return transfer.id;
-    }, TX_OPTIONS);
+    const id = await this.prisma.$transaction((tx) => this.createInTx(tx, dto, actor), TX_OPTIONS);
     return this.findOne(id, actor);
   }
 
-  async receive(id: string, dto: ReceiveTransferDto, actor: AuthUser) {
-    await this.prisma.$transaction(async (tx) => {
-      const transfer = await this.lockInTransit(tx, id);
-      if (actor.branchId && transfer.destination.branchId !== actor.branchId) {
-        throw new ForbiddenException('Solo puede recibir transferencias dirigidas a su sucursal');
-      }
-      const weighing = transfer.destination.branch?.transferWeighingEnabled ?? false;
-      const given = new Map((dto.items ?? []).map((i) => [i.itemId, i]));
-      for (const itemId of given.keys()) {
-        if (!transfer.items.some((i) => i.id === itemId)) throw new BadRequestException('Una línea no pertenece a esta transferencia');
-      }
-      if (weighing && transfer.items.some((i) => !given.has(i.id))) {
-        throw new BadRequestException(`${transfer.destination.branch?.name ?? 'El destino'} pesa las transferencias: ingrese el peso recibido de cada línea`);
-      }
+  /** Envío dentro de una transacción existente (también lo usa el despacho de rutas). Devuelve el id. */
+  async createInTx(tx: Prisma.TransactionClient, dto: CreateTransferDto, actor: AuthUser, opts: { includeExpired?: boolean } = {}): Promise<string> {
+    if (dto.originWarehouseId === dto.destinationWarehouseId) throw new BadRequestException('El origen y el destino deben ser distintos');
+    const [origin, destination] = await Promise.all([
+      tx.warehouse.findFirst({ where: { id: dto.originWarehouseId, isActive: true } }),
+      tx.warehouse.findFirst({ where: { id: dto.destinationWarehouseId, isActive: true } }),
+    ]);
+    if (!origin) throw new BadRequestException('Almacén de origen inexistente o inactivo');
+    if (!destination) throw new BadRequestException('Almacén de destino inexistente o inactivo');
+    if (actor.branchId && origin.branchId !== actor.branchId) {
+      throw new ForbiddenException('Solo puede enviar desde el almacén de su sucursal');
+    }
 
-      const summary: { lot: string; sentKg: string; receivedKg: string; differenceKg: string }[] = [];
-      for (const item of transfer.items) {
-        const sent = D(item.sentWeightKg);
-        const received = given.has(item.id) ? kg(D(given.get(item.id)!.receivedWeightKg)) : sent;
-        if (received.gt(sent)) {
-          throw new BadRequestException(
-            `Lote ${item.lot.lotCode}: no se puede recibir más de lo enviado (${sent.toFixed(3)} kg). Un sobrante se registra con un ajuste de inventario.`,
-          );
-        }
-        const difference = kg(sent.minus(received));
-        await tx.transferItem.update({
-          where: { id: item.id },
+    const transferNumber = await this.sequences.next(tx, 'transfer');
+    const transfer = await tx.transfer.create({
+      data: {
+        transferNumber,
+        originWarehouseId: origin.id,
+        destinationWarehouseId: destination.id,
+        notes: dto.notes,
+        sentById: actor.id,
+      },
+    });
+
+    // Cada línea lee los saldos ya descontados por las anteriores (misma transacción), así un producto repetido no se envía dos veces.
+    for (const item of dto.items) {
+      const product = await tx.product.findFirst({ where: { id: item.productId, isActive: true } });
+      if (!product) throw new BadRequestException('Producto inexistente o inactivo');
+      const lots = await availableLots(tx, origin.id, product.id, true, opts.includeExpired);
+      let allocations: Allocation[];
+      try {
+        allocations = item.lotId
+          ? allocateManual(lots, item.weightKg, [{ lotId: item.lotId, weightKg: item.weightKg }])
+          : allocateFefo(lots, item.weightKg);
+      } catch (e) {
+        if (e instanceof AllocationError) throw new BadRequestException(`${product.name}: ${e.message}`);
+        throw e;
+      }
+      for (const a of allocations) {
+        const share = allocations.length === 1 ? D(item.quantity ?? 0) : ZERO;
+        await tx.transferItem.create({
           data: {
-            receivedWeightKg: received,
-            receivedQuantity: given.get(item.id)?.receivedQuantity ?? item.sentQuantity,
-            differenceKg: difference,
-            lossAmount: money(difference.times(item.costPerKg)),
+            transferId: transfer.id,
+            productId: product.id,
+            lotId: a.lot.lotId,
+            sentWeightKg: a.weightKg,
+            sentQuantity: share,
+            costPerKg: a.lot.costPerKg,
           },
         });
-        if (received.gt(0)) {
-          await this.inventory.registerMovement(tx, {
-            warehouseId: transfer.destinationWarehouseId,
-            productId: item.productId,
-            lotId: item.lotId,
-            movementType: InventoryMovementType.TRANSFER_IN,
-            weightKg: received,
-            unitCostPerKg: D(item.costPerKg),
-            referenceType: 'transfer',
-            referenceId: transfer.id,
-            reason: difference.gt(0) ? `Recibido de ${transfer.origin.name}; faltaron ${difference.toFixed(3)} kg` : `Recibido de ${transfer.origin.name}`,
-            createdById: actor.id,
-          });
-        }
-        summary.push({ lot: item.lot.lotCode, sentKg: sent.toFixed(3), receivedKg: received.toFixed(3), differenceKg: difference.toFixed(3) });
+        await this.inventory.registerMovement(tx, {
+          warehouseId: origin.id,
+          productId: product.id,
+          lotId: a.lot.lotId,
+          movementType: InventoryMovementType.TRANSFER_OUT,
+          weightKg: a.weightKg.negated(),
+          unitCostPerKg: a.lot.costPerKg,
+          referenceType: 'transfer',
+          referenceId: transfer.id,
+          reason: `Envío a ${destination.name}`,
+          createdById: actor.id,
+        });
       }
+    }
 
-      await tx.transfer.update({
-        where: { id },
-        data: { status: TransferStatus.RECEIVED, receivedById: actor.id, receivedAt: new Date(), receiveNotes: dto.notes },
-      });
-      await this.audit.log(
-        {
-          userId: actor.id,
-          action: 'transfers.receive',
-          entityType: 'transfer',
-          entityId: id,
-          oldData: { status: TransferStatus.IN_TRANSIT },
-          newData: { status: TransferStatus.RECEIVED, items: summary },
-          reason: dto.notes,
-        },
-        tx,
-      );
-    }, TX_OPTIONS);
+    await this.audit.log(
+      {
+        userId: actor.id,
+        action: 'transfers.create',
+        entityType: 'transfer',
+        entityId: transfer.id,
+        newData: { transferNumber, origin: origin.code, destination: destination.code, items: dto.items },
+      },
+      tx,
+    );
+    return transfer.id;
+  }
+
+  async receive(id: string, dto: ReceiveTransferDto, actor: AuthUser) {
+    await this.prisma.$transaction((tx) => this.receiveInTx(tx, id, dto, actor), TX_OPTIONS);
     return this.findOne(id, actor);
+  }
+
+  /** Recepción dentro de una transacción existente (despacho y cierre de rutas). */
+  async receiveInTx(tx: Prisma.TransactionClient, id: string, dto: ReceiveTransferDto, actor: AuthUser) {
+    const transfer = await this.lockInTransit(tx, id);
+    if (actor.branchId && transfer.destination.branchId !== actor.branchId) {
+      throw new ForbiddenException('Solo puede recibir transferencias dirigidas a su sucursal');
+    }
+    const weighing = transfer.destination.branch?.transferWeighingEnabled ?? false;
+    const given = new Map((dto.items ?? []).map((i) => [i.itemId, i]));
+    for (const itemId of given.keys()) {
+      if (!transfer.items.some((i) => i.id === itemId)) throw new BadRequestException('Una línea no pertenece a esta transferencia');
+    }
+    if (weighing && transfer.items.some((i) => !given.has(i.id))) {
+      throw new BadRequestException(`${transfer.destination.branch?.name ?? 'El destino'} pesa las transferencias: ingrese el peso recibido de cada línea`);
+    }
+
+    const summary: { lot: string; sentKg: string; receivedKg: string; differenceKg: string }[] = [];
+    for (const item of transfer.items) {
+      const sent = D(item.sentWeightKg);
+      const received = given.has(item.id) ? kg(D(given.get(item.id)!.receivedWeightKg)) : sent;
+      if (received.gt(sent)) {
+        throw new BadRequestException(
+          `Lote ${item.lot.lotCode}: no se puede recibir más de lo enviado (${sent.toFixed(3)} kg). Un sobrante se registra con un ajuste de inventario.`,
+        );
+      }
+      const difference = kg(sent.minus(received));
+      await tx.transferItem.update({
+        where: { id: item.id },
+        data: {
+          receivedWeightKg: received,
+          receivedQuantity: given.get(item.id)?.receivedQuantity ?? item.sentQuantity,
+          differenceKg: difference,
+          lossAmount: money(difference.times(item.costPerKg)),
+        },
+      });
+      if (received.gt(0)) {
+        await this.inventory.registerMovement(tx, {
+          warehouseId: transfer.destinationWarehouseId,
+          productId: item.productId,
+          lotId: item.lotId,
+          movementType: InventoryMovementType.TRANSFER_IN,
+          weightKg: received,
+          unitCostPerKg: D(item.costPerKg),
+          referenceType: 'transfer',
+          referenceId: transfer.id,
+          reason: difference.gt(0) ? `Recibido de ${transfer.origin.name}; faltaron ${difference.toFixed(3)} kg` : `Recibido de ${transfer.origin.name}`,
+          createdById: actor.id,
+        });
+      }
+      summary.push({ lot: item.lot.lotCode, sentKg: sent.toFixed(3), receivedKg: received.toFixed(3), differenceKg: difference.toFixed(3) });
+    }
+
+    await tx.transfer.update({
+      where: { id },
+      data: { status: TransferStatus.RECEIVED, receivedById: actor.id, receivedAt: new Date(), receiveNotes: dto.notes },
+    });
+    await this.audit.log(
+      {
+        userId: actor.id,
+        action: 'transfers.receive',
+        entityType: 'transfer',
+        entityId: id,
+        oldData: { status: TransferStatus.IN_TRANSIT },
+        newData: { status: TransferStatus.RECEIVED, items: summary },
+        reason: dto.notes,
+      },
+      tx,
+    );
   }
 
   /** Cancela una transferencia en tránsito: el stock vuelve al almacén de origen, en los mismos lotes. */
