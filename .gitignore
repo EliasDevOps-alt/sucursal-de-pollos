@@ -21,3 +21,6 @@ mobile/**/build/
 
 # Respaldos locales de la base de datos
 backups/
+
+# Compilación aparte para pruebas de punta a punta (servidor en otro puerto)
+.dist-test/

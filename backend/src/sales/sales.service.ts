@@ -18,6 +18,8 @@ import { D, kg, money, perKg, ZERO } from '../common/decimal';
 import { ReceivablesService } from '../common/receivables.service';
 import { SequenceService } from '../common/sequence.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { availableLots } from '../inventory/lot-stock';
+import { returnInclude } from './returns.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Allocation, AllocationError, allocateFefo, allocateManual, AvailableLot } from './allocation';
 import { CreateSaleDto, SaleFiltersDto } from './dto/sale.dto';
@@ -60,11 +62,6 @@ interface BuiltLine {
   priceChangeReason?: string;
 }
 
-/** Fecha local de hoy como 'YYYY-MM-DD' (los lotes vencidos no se venden). */
-function todayLocal() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 @Injectable()
 export class SalesService {
@@ -112,6 +109,7 @@ export class SalesService {
         annulledBy: { select: { fullName: true } },
         creditAuthorizedBy: { select: { fullName: true } },
         payments: { include: { receivedBy: { select: { fullName: true } } } },
+        returns: { include: returnInclude, orderBy: { createdAt: 'asc' } },
         items: {
           include: {
             product: { select: { id: true, code: true, name: true } },
@@ -126,16 +124,18 @@ export class SalesService {
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
 
-    // Rentabilidad con el costo real congelado en cada asignación de lote.
+    // Rentabilidad con el costo real congelado en cada asignación de lote, neta de devoluciones:
+    // lo devuelto deja de ser ingreso; su costo solo se recupera si volvió al stock (lo descartado es pérdida).
     const items = sale.items.map((item) => {
-      const cost = money(item.allocations.reduce((s, a) => s.plus(D(a.weightKg).times(a.costPerKg)), ZERO));
-      const margin = money(D(item.subtotal).minus(cost));
+      const cost = money(item.allocations.reduce((s, a) => s.plus(D(a.weightKg).minus(a.restockedWeightKg).times(a.costPerKg)), ZERO));
+      const margin = money(D(item.subtotal).minus(item.returnedAmount).minus(cost));
       return { ...item, cost, margin };
     });
+    const revenue = money(D(sale.totalAmount).minus(sale.returnedAmount));
     const cost = money(items.reduce((s, i) => s.plus(i.cost), ZERO));
-    const margin = money(D(sale.totalAmount).minus(cost));
-    const marginPercentage = D(sale.totalAmount).gt(0) ? margin.div(sale.totalAmount).times(100).toDecimalPlaces(2) : ZERO;
-    return { ...sale, items, profitability: { revenue: sale.totalAmount, cost, margin, marginPercentage } };
+    const margin = money(revenue.minus(cost));
+    const marginPercentage = revenue.gt(0) ? margin.div(revenue).times(100).toDecimalPlaces(2) : ZERO;
+    return { ...sale, items, profitability: { revenue, cost, margin, marginPercentage } };
   }
 
   // ── Cotización y registro ───────────────────────────────
@@ -290,6 +290,9 @@ export class SalesService {
       if (locked.status !== SaleStatus.CONFIRMED) throw new ConflictException('Solo se pueden anular ventas confirmadas');
 
       const sale = await tx.sale.findUniqueOrThrow({ where: { id }, include: { items: { include: { allocations: true } } } });
+      if (D(sale.returnedAmount).gt(0)) {
+        throw new ConflictException('La venta tiene devoluciones registradas: no se puede anular (registre una devolución por el resto)');
+      }
       for (const item of sale.items) {
         for (const a of item.allocations) {
           await this.inventory.registerMovement(tx, {
@@ -334,7 +337,7 @@ export class SalesService {
   async availableLotsFor(warehouseId: string, productId: string) {
     const warehouse = await this.prisma.warehouse.findUnique({ where: { id: warehouseId } });
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
-    const lots = await this.availableLots(this.prisma, warehouseId, productId, false);
+    const lots = await availableLots(this.prisma, warehouseId, productId, false);
     const prices = await this.lotPrices(this.prisma, lots.map((l) => l.lotId), warehouse.branchId);
     return lots.map((l, i) => ({ ...l, pricePerKg: prices.get(l.lotId) ?? null, fefoOrder: i + 1 }));
   }
@@ -370,7 +373,7 @@ export class SalesService {
       const product = products.get(line.productId);
       if (!product) throw new BadRequestException(`Línea ${idx + 1}: producto inexistente o inactivo`);
 
-      const lots = (await this.availableLots(db, warehouse.id, product.id, lock)).map((l) => ({
+      const lots = (await availableLots(db, warehouse.id, product.id, lock)).map((l) => ({
         ...l,
         availableKg: kg(l.availableKg.minus(consumed.get(l.lotId) ?? ZERO)),
       }));
@@ -486,30 +489,6 @@ export class SalesService {
       paymentStatus,
       issues,
     };
-  }
-
-  /** Lotes con saldo del producto en el almacén, no vencidos, en orden FEFO. */
-  private async availableLots(db: Db, warehouseId: string, productId: string, lock: boolean): Promise<AvailableLot[]> {
-    const rows = await db.$queryRaw<
-      { lot_id: string; lot_code: string; expiry_date: Date; weight_kg: Prisma.Decimal; actual_cost_per_kg: Prisma.Decimal }[]
-    >`
-      SELECT ib.lot_id, l.lot_code, l.expiry_date, ib.weight_kg, l.actual_cost_per_kg
-      FROM inventory_balances ib
-      JOIN lots l ON l.id = ib.lot_id
-      WHERE ib.warehouse_id = ${warehouseId}::uuid
-        AND ib.product_id = ${productId}::uuid
-        AND ib.weight_kg > 0
-        AND l.status = 'ACTIVE'
-        AND l.expiry_date >= ${todayLocal()}::date
-      ORDER BY l.expiry_date ASC, l.created_at ASC
-      ${lock ? Prisma.sql`FOR UPDATE OF ib` : Prisma.empty}`;
-    return rows.map((r) => ({
-      lotId: r.lot_id,
-      lotCode: r.lot_code,
-      expiryDate: r.expiry_date,
-      availableKg: D(r.weight_kg),
-      costPerKg: D(r.actual_cost_per_kg),
-    }));
   }
 
   /** Precio vigente por lote: el de la sucursal si existe, si no el central. */

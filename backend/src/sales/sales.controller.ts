@@ -5,19 +5,36 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { PERMISSIONS } from '../auth/permissions';
 import { AnnulDto } from '../purchases/dto/purchase.dto';
+import { CreateReturnDto, ReturnFiltersDto } from './dto/return.dto';
 import { CreateSaleDto, SaleFiltersDto } from './dto/sale.dto';
+import { ReturnsService } from './returns.service';
 import { SalesService } from './sales.service';
 
 @ApiTags('sales')
 @ApiBearerAuth()
 @Controller('sales')
 export class SalesController {
-  constructor(private readonly sales: SalesService) {}
+  constructor(
+    private readonly sales: SalesService,
+    private readonly returns: ReturnsService,
+  ) {}
 
   @Get()
   @RequirePermissions(PERMISSIONS.SALES_VIEW)
   findAll(@Query() filters: SaleFiltersDto) {
     return this.sales.findAll(filters);
+  }
+
+  @Get('returns')
+  @RequirePermissions(PERMISSIONS.SALES_VIEW)
+  returnList(@Query() filters: ReturnFiltersDto) {
+    return this.returns.findAll(filters);
+  }
+
+  @Post(':id/returns')
+  @RequirePermissions(PERMISSIONS.SALES_CREATE)
+  createReturn(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateReturnDto, @CurrentUser() user: AuthUser) {
+    return this.returns.create(id, dto, user);
   }
 
   @Get('available-lots')

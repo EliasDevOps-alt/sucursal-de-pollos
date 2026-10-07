@@ -20,6 +20,8 @@ export const PERMISSIONS = {
   // Inventario
   INVENTORY_VIEW: 'inventory.view',
   INVENTORY_ADJUST: 'inventory.adjust',
+  TRANSFERS_CREATE: 'transfers.create',
+  TRANSFERS_RECEIVE: 'transfers.receive',
   // Clientes
   CUSTOMERS_VIEW: 'customers.view',
   CUSTOMERS_MANAGE: 'customers.manage',
@@ -28,6 +30,7 @@ export const PERMISSIONS = {
   SALES_VIEW: 'sales.view',
   SALES_CREATE: 'sales.create',
   SALES_ANNUL: 'sales.annul',
+  SALES_RETURN: 'sales.return',
   PRICE_MODIFY: 'price.modify',
   CREDIT_EXCEPTION_AUTHORIZE: 'credit.exception_authorize',
   // Cobranza
@@ -61,13 +64,16 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
   'lot.override': 'Forzar salida de un lote no prioritario',
   'price.configure': 'Configurar precios por lote',
   'inventory.view': 'Ver stock y kardex',
-  'inventory.adjust': 'Ajustar inventario',
+  'inventory.adjust': 'Ajustar inventario y registrar bajas',
+  'transfers.create': 'Enviar transferencias entre almacenes',
+  'transfers.receive': 'Recibir transferencias en el almacén de destino',
   'customers.view': 'Ver clientes',
   'customers.manage': 'Crear y editar clientes',
   'customer.rank_change': 'Cambiar rango de cliente',
   'sales.view': 'Ver ventas',
   'sales.create': 'Registrar ventas',
   'sales.annul': 'Anular ventas',
+  'sales.return': 'Autorizar devoluciones de clientes',
   'price.modify': 'Modificar precio final en una venta',
   'credit.exception_authorize': 'Autorizar ventas que superan el límite de crédito',
   'collections.view': 'Ver cobros de deuda',
@@ -90,7 +96,7 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
     code: 'SELLER_CENTRAL',
     name: 'Vendedor Central',
     permissions: [
-      P.CATALOG_VIEW, P.LOTS_VIEW, P.INVENTORY_VIEW,
+      P.CATALOG_VIEW, P.LOTS_VIEW, P.INVENTORY_VIEW, P.TRANSFERS_CREATE, P.TRANSFERS_RECEIVE,
       P.CUSTOMERS_VIEW, P.CUSTOMERS_MANAGE,
       P.SALES_VIEW, P.SALES_CREATE, P.PRESALES_VIEW_ALL,
       P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE,
@@ -100,7 +106,7 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
     code: 'SELLER_BRANCH',
     name: 'Vendedor Sucursal',
     permissions: [
-      P.CATALOG_VIEW, P.LOTS_VIEW, P.INVENTORY_VIEW,
+      P.CATALOG_VIEW, P.LOTS_VIEW, P.INVENTORY_VIEW, P.TRANSFERS_RECEIVE,
       P.CUSTOMERS_VIEW, P.CUSTOMERS_MANAGE,
       P.SALES_VIEW, P.SALES_CREATE, P.PRICE_MODIFY,
       P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE,

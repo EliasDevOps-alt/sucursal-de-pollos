@@ -87,6 +87,9 @@ const TIME_COLUMNS: [string, string[]][] = [
   ['customers', ['created_at', 'updated_at']],
   ['customer_addresses', ['created_at']],
   ['audit_logs', ['created_at']],
+  ['transfers', ['sent_at', 'received_at', 'cancelled_at']],
+  ['inventory_adjustments', ['created_at', 'annulled_at']],
+  ['sale_returns', ['created_at']],
 ];
 
 /** Mueve lo creado desde `realStart` a la ventana [windowStart, windowEnd], conservando el orden relativo. */
@@ -153,7 +156,9 @@ const KG_BY_TYPE: Record<string, [number, number]> = {
   quick: [2, 12],
 };
 
-const stats = { purchases: 0, sales: 0, presales: 0, attended: 0, credit: 0, skippedLines: 0, events: [] as string[] };
+const stats = { purchases: 0, sales: 0, presales: 0, attended: 0, credit: 0, skippedLines: 0, transfers: 0, branchSales: 0, events: [] as string[] };
+// Las compras cubren también lo que se envía a la sucursal.
+const BRANCH_SUPPLY = 1.06;
 
 async function main() {
   if (!process.argv.includes('--reset')) {
@@ -164,7 +169,8 @@ async function main() {
 
   // ── 1. Limpieza ──────────────────────────────────────────
   console.log('Limpiando operaciones…');
-  await prisma.$executeRawUnsafe(`TRUNCATE presale_items, presales, sale_lot_allocations, sale_items, payments, receivable_movements,
+  await prisma.$executeRawUnsafe(`TRUNCATE sale_return_items, sale_returns, transfer_items, transfers, inventory_adjustments,
+    presale_items, presales, sale_lot_allocations, sale_items, payments, receivable_movements,
     sales, inventory_movements, inventory_balances, lot_prices, lots, reception_items, receptions, purchase_items, purchases,
     sync_operations, gps_positions, devices, customer_addresses, customers, audit_logs RESTART IDENTITY CASCADE`);
   await prisma.$executeRawUnsafe(`UPDATE document_sequences SET last_value = 0`);
@@ -176,6 +182,9 @@ async function main() {
 
   const admin = await login('admin', 'Admin123!');
   const seller = await login('vcentral', 'Demo123!');
+  const branchSeller = await login('vsucursal', 'Demo123!');
+  // La sucursal pesa lo que recibe: así las transferencias muestran diferencias reales.
+  await prisma.branch.update({ where: { code: 'SUC1' }, data: { transferWeighingEnabled: true } });
   const preseller = await login('preventista', 'Demo123!', 'mobile');
   const ADMIN_AUTH = { username: 'admin', password: 'Admin123!' };
 
@@ -185,6 +194,7 @@ async function main() {
   const types: any[] = await api('GET', '/customer-types', admin);
   const ranks: any[] = await api('GET', '/customer-ranks', admin);
   const central = warehouses.find((w) => w.code === 'ALM-CEN');
+  const branchWh = warehouses.find((w) => w.code === 'ALM-SUC1');
   const byCode = Object.fromEntries(products.map((p) => [p.code, p]));
   const supplierId = (name: string) => suppliers.find((s) => s.name === name)!.id;
 
@@ -228,7 +238,7 @@ async function main() {
       for (const [code, plan] of Object.entries(PLAN)) {
         if (d % plan.everyDays !== 0) continue;
         costs[code] = r2(Math.min(plan.baseCost * 1.08, Math.max(plan.baseCost * 0.93, costs[code] + between(-0.25, 0.25))));
-        const kg = r3(between(plan.minKg, plan.maxKg) * (weekday === 6 ? 1.25 : 1)); // sábado: más demanda
+        const kg = r3(between(plan.minKg, plan.maxKg) * BRANCH_SUPPLY * (weekday === 6 ? 1.25 : 1)); // sábado: más demanda
         const list = bySupplier.get(plan.supplier) ?? [];
         list.push({ code, productId: byCode[code].id, purchasedWeightKg: kg, unitCost: costs[code], purchasedQuantity: plan.unitsPerKg ? Math.round(kg * plan.unitsPerKg) : undefined });
         bySupplier.set(plan.supplier, list);
@@ -290,6 +300,16 @@ async function main() {
         stats.skippedLines++;
       }
     }
+
+    // Sucursal: se abastece desde el central día por medio (lo recibe pesado) y vende al contado.
+    if ((weekday !== 0 && d % 2 === 0) || isToday) await supplyBranch(seller, branchSeller, central.id, branchWh.id, byCode, isToday);
+    if (d > 0) await branchSales(branchSeller, branchWh.id, weekday);
+
+    // Inventario operativo: conteos semanales, una baja y devoluciones.
+    if (daysAgo % 7 === 1) await physicalCount(admin, central.id);
+    if (daysAgo === 5) await damagedLoss(admin, central.id);
+    if (daysAgo === 3) await returnSale(seller, ADMIN_AUTH, 'RESTOCK');
+    if (daysAgo === 1) await returnSale(seller, ADMIN_AUTH, 'DISCARD');
 
     // Eventos para mostrar controles en la demo.
     if (daysAgo === 6) await annulOne(admin);
@@ -378,6 +398,7 @@ async function main() {
   console.log(`\nDatos de demo generados (${firstDay} → ${today}):`);
   console.log(`  ${stats.purchases} compras · ${stats.sales} ventas (${stats.credit} con crédito) · ${stats.presales} preventas (${stats.attended} atendidas, ${pendingNow} pendientes)`);
   console.log(`  Ventas confirmadas: Bs ${Number(revenue).toFixed(2)} · Por cobrar: Bs ${Number(debt).toFixed(2)} · Stock: ${Number(stock).toFixed(1)} kg`);
+  console.log(`  ${stats.transfers} transferencias a la sucursal · ${stats.branchSales} ventas en sucursal`);
   console.log(`  Líneas omitidas por falta de stock: ${stats.skippedLines}`);
   for (const e of stats.events) console.log(`  · ${e}`);
 }
@@ -475,6 +496,102 @@ async function creditException(seller: string, customers: any[], byCode: any, wh
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
   }
+}
+
+// ── Sucursal e inventario operativo ─────────────────────────
+
+/** Envío central → sucursal; la sucursal lo recibe pesado (a veces llega algo menos). El de hoy queda en tránsito. */
+async function supplyBranch(seller: string, branchSeller: string, from: string, to: string, byCode: any, inTransit: boolean) {
+  // Lo que se pide se ajusta a lo vendible en el central (se deja un margen para el mostrador).
+  const lots = (await api<any[]>('GET', `/inventory/lots?warehouseId=${from}`, seller)).filter((l) => !l.expired);
+  const available = (productId: string) => lots.filter((l) => l.product.id === productId).reduce((t, l) => t + Number(l.weightKg), 0);
+  const wanted = [
+    { productId: byCode['PE-PIO'].id, weightKg: between(18, 28) },
+    { productId: byCode['PE-GRA'].id, weightKg: between(12, 20) },
+    { productId: byCode['PE-SOF'].id, weightKg: between(10, 16) },
+    ...(rand() < 0.6 ? [{ productId: byCode['DE-PIE'].id, weightKg: between(5, 9) }] : []),
+  ];
+  const items = wanted
+    .map((i) => ({ productId: i.productId, weightKg: r3(Math.min(i.weightKg, available(i.productId) * 0.5)) }))
+    .filter((i) => i.weightKg >= 5)
+    .slice(0, 3);
+  if (!items.length) return;
+  let transfer: any;
+  try {
+    transfer = await api('POST', '/transfers', seller, { originWarehouseId: from, destinationWarehouseId: to, items, notes: 'Reposición de la sucursal' });
+  } catch (e) {
+    if (e instanceof ApiError) return;
+    throw e;
+  }
+  stats.transfers++;
+  if (inTransit) {
+    stats.events.push(`Transferencia ${transfer.transferNumber} en tránsito a la sucursal (lista para recibir en la demo)`);
+    return;
+  }
+  const short = rand() < 0.35;
+  await api('POST', `/transfers/${transfer.id}/receive`, branchSeller, {
+    items: transfer.items.map((i: any, idx: number) => ({
+      itemId: i.id,
+      receivedWeightKg: short && idx === 0 ? r3(Number(i.sentWeightKg) - between(0.2, 0.7)) : Number(i.sentWeightKg),
+    })),
+    notes: short ? 'Goteo en el viaje' : undefined,
+  });
+}
+
+/** Ventas al contado en la sucursal con lo que tiene en stock. */
+async function branchSales(branchSeller: string, wh: string, weekday: number) {
+  const balances = await prisma.inventoryBalance.findMany({ where: { warehouseId: wh, weightKg: { gt: 1 } }, include: { lot: true } });
+  const today = localToday();
+  const sellable = balances.filter((b) => b.lot.expiryDate.toISOString().slice(0, 10) >= today).map((b) => ({ productId: b.productId, kg: Number(b.weightKg) }));
+  for (let i = 0, n = weekday === 0 ? int(1, 2) : int(2, 4); i < n && sellable.length; i++) {
+    const b = pick(sellable);
+    const weightKg = r3(Math.min(b.kg - 0.5, between(2, 9)));
+    if (weightKg <= 0.5) continue;
+    const base = { warehouseId: wh, items: [{ productId: b.productId, weightKg }], paymentMethod: weighted([['EFECTIVO', 7], ['QR', 3]]) };
+    try {
+      const quote: any = await api('POST', '/sales/quote', branchSeller, base);
+      await api('POST', '/sales', branchSeller, { ...base, paidAmount: Number(quote.total) });
+      b.kg -= weightKg;
+      stats.branchSales++;
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+    }
+  }
+}
+
+/** Conteo físico semanal de dos lotes del central: suele faltar algo por goteo. */
+async function physicalCount(admin: string, wh: string) {
+  const lots: any[] = (await api<any[]>('GET', `/inventory/lots?warehouseId=${wh}`, admin)).filter((l) => !l.expired && Number(l.weightKg) > 15);
+  for (const lot of lots.sort(() => rand() - 0.5).slice(0, 2)) {
+    const counted = r3(Number(lot.weightKg) - between(0.3, 1.6));
+    await api('POST', '/inventory/adjustments', admin, {
+      kind: 'COUNT', reasonCode: 'PHYSICAL_COUNT', warehouseId: wh, lotId: lot.lotId, countedWeightKg: counted, notes: 'Conteo semanal de cámara (goteo)',
+    });
+  }
+}
+
+async function damagedLoss(admin: string, wh: string) {
+  const lot = (await api<any[]>('GET', `/inventory/lots?warehouseId=${wh}`, admin)).find((l) => !l.expired && Number(l.weightKg) > 10);
+  if (!lot) return;
+  const adj: any = await api('POST', '/inventory/adjustments', admin, {
+    kind: 'LOSS', reasonCode: 'DAMAGED', warehouseId: wh, lotId: lot.lotId, weightKg: 3.5, notes: 'Bolsas rotas al descargar el camión',
+  });
+  stats.events.push(`Baja ${adj.adjustmentNumber}: 3,5 kg de ${lot.product.name} dañados`);
+}
+
+/** Devolución de una venta reciente a crédito, autorizada por el administrador. */
+async function returnSale(seller: string, auth: { username: string; password: string }, disposition: 'RESTOCK' | 'DISCARD') {
+  const sale = await prisma.sale.findFirst({
+    where: { status: 'CONFIRMED', customerId: { not: null }, creditAmount: { gt: 0 }, returnedAmount: 0 },
+    include: { items: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!sale) return;
+  const item = sale.items[0];
+  const weightKg = r3(Math.min(Number(item.requestedWeightKg), between(1.5, 4)));
+  const reason = disposition === 'RESTOCK' ? 'El cliente pidió menos de lo que se le despachó' : 'Producto con mal olor al abrir la bolsa';
+  const dv: any = await api('POST', `/sales/${sale.id}/returns`, seller, { reason, items: [{ saleItemId: item.id, weightKg, disposition }], authorization: auth });
+  stats.events.push(`Devolución ${dv.returnNumber} de ${sale.saleNumber} (${disposition === 'RESTOCK' ? 'reingresó al stock' : 'descartada'})`);
 }
 
 main()

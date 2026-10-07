@@ -19,6 +19,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { ReportsModule } from './reports/reports.module';
 import { SalesModule } from './sales/sales.module';
+import { TransfersModule } from './transfers/transfers.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -40,6 +41,7 @@ import { UsersModule } from './users/users.module';
     MobileModule,
     CollectionsModule,
     AdminModule,
+    TransfersModule,
   ],
   controllers: [HealthController],
   providers: [

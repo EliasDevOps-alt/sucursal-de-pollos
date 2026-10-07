@@ -76,19 +76,19 @@ export class ReportsService {
         SELECT generate_series(${r.from}::date, ${r.to}::date, interval '1 day')::date AS day
       ),
       item_cost AS (
-        SELECT a.sale_item_id, SUM(a.weight_kg * a.cost_per_kg) AS cost FROM sale_lot_allocations a GROUP BY a.sale_item_id
+        SELECT a.sale_item_id, SUM((a.weight_kg - a.restocked_weight_kg) * a.cost_per_kg) AS cost FROM sale_lot_allocations a GROUP BY a.sale_item_id
       ),
       per_sale AS (
-        SELECT s.id, ${this.localDate('s.created_at')} AS day, s.total_amount,
-               SUM(ic.cost) AS cost, SUM(si.requested_weight_kg) AS kg
+        SELECT s.id, s.status, ${this.localDate('s.created_at')} AS day, s.total_amount - s.returned_amount AS total_amount,
+               SUM(ic.cost) AS cost, SUM(si.requested_weight_kg - si.returned_weight_kg) AS kg
         FROM sales s
         JOIN sale_items si ON si.sale_id = s.id
         JOIN item_cost ic ON ic.sale_item_id = si.id
-        WHERE s.status = 'CONFIRMED' AND ${this.inRange('s.created_at', r)}
+        WHERE s.status IN ('CONFIRMED', 'RETURNED') AND ${this.inRange('s.created_at', r)}
         GROUP BY s.id
       )
       SELECT d.day, COALESCE(SUM(p.total_amount), 0) AS revenue, COALESCE(SUM(p.cost), 0) AS cost,
-             COUNT(p.id) AS count, COALESCE(SUM(p.kg), 0) AS kg
+             COUNT(p.id) FILTER (WHERE p.status = 'CONFIRMED') AS count, COALESCE(SUM(p.kg), 0) AS kg
       FROM days d LEFT JOIN per_sale p ON p.day = d.day
       GROUP BY d.day ORDER BY d.day`;
 
@@ -115,16 +115,17 @@ export class ReportsService {
       // El ingreso de la línea se reparte entre sus lotes en proporción al peso tomado de cada uno.
       rows = await this.prisma.$queryRaw<Row[]>`
         SELECT l.id, l.lot_code AS label, p.name AS detail,
-               SUM(a.weight_kg) AS kg,
-               SUM(si.subtotal * a.weight_kg / si.requested_weight_kg) AS revenue,
-               SUM(a.weight_kg * a.cost_per_kg) AS cost,
-               COUNT(DISTINCT s.id) AS sales
+               SUM(a.weight_kg - a.returned_weight_kg) AS kg,
+               SUM(si.subtotal * a.weight_kg / si.requested_weight_kg - COALESCE(ra.amount, 0)) AS revenue,
+               SUM((a.weight_kg - a.restocked_weight_kg) * a.cost_per_kg) AS cost,
+               COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'CONFIRMED') AS sales
         FROM sale_lot_allocations a
         JOIN sale_items si ON si.id = a.sale_item_id
         JOIN sales s ON s.id = si.sale_id
         JOIN lots l ON l.id = a.lot_id
         JOIN products p ON p.id = l.product_id
-        WHERE s.status = 'CONFIRMED' AND ${this.inRange('s.created_at', r)}
+        LEFT JOIN (SELECT allocation_id, SUM(amount) AS amount FROM sale_return_items GROUP BY allocation_id) ra ON ra.allocation_id = a.id
+        WHERE s.status IN ('CONFIRMED', 'RETURNED') AND ${this.inRange('s.created_at', r)}
         GROUP BY l.id, l.lot_code, p.name`;
     } else {
       const key = {
@@ -135,18 +136,18 @@ export class ReportsService {
       const group = { product: Prisma.sql`p.id, p.name, p.code`, customer: Prisma.sql`c.id, c.name, c.code`, seller: Prisma.sql`u.id, u.full_name, u.username` }[groupBy];
       rows = await this.prisma.$queryRaw<Row[]>`
         WITH item_cost AS (
-          SELECT a.sale_item_id, SUM(a.weight_kg * a.cost_per_kg) AS cost FROM sale_lot_allocations a GROUP BY a.sale_item_id
+          SELECT a.sale_item_id, SUM((a.weight_kg - a.restocked_weight_kg) * a.cost_per_kg) AS cost FROM sale_lot_allocations a GROUP BY a.sale_item_id
         )
         SELECT ${key},
-               SUM(si.requested_weight_kg) AS kg, SUM(si.subtotal) AS revenue, SUM(ic.cost) AS cost,
-               COUNT(DISTINCT s.id) AS sales
+               SUM(si.requested_weight_kg - si.returned_weight_kg) AS kg, SUM(si.subtotal - si.returned_amount) AS revenue, SUM(ic.cost) AS cost,
+               COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'CONFIRMED') AS sales
         FROM sale_items si
         JOIN sales s ON s.id = si.sale_id
         JOIN item_cost ic ON ic.sale_item_id = si.id
         JOIN products p ON p.id = si.product_id
         JOIN users u ON u.id = s.seller_id
         LEFT JOIN customers c ON c.id = s.customer_id
-        WHERE s.status = 'CONFIRMED' AND ${this.inRange('s.created_at', r)}
+        WHERE s.status IN ('CONFIRMED', 'RETURNED') AND ${this.inRange('s.created_at', r)}
         GROUP BY ${group}`;
     }
 
@@ -217,6 +218,7 @@ export class ReportsService {
     const shrinkageKg = lots.reduce((s, l) => s.plus(dec(l.shrinkage_kg)), ZERO);
     return {
       range: r,
+      inventoryLosses: await this.inventoryLosses(r),
       totals: {
         purchasedKg: kg(purchasedKg),
         shrinkageKg: kg(shrinkageKg),
@@ -246,6 +248,76 @@ export class ReportsService {
         shrinkagePercentage: dec(l.shrinkage_pct),
         loss: money(dec(l.loss)),
         treatment: l.treatment,
+      })),
+    };
+  }
+
+  /**
+   * Pérdidas de inventario posteriores a la recepción, por causa: bajas (vencido, dañado…), faltantes de conteo,
+   * faltantes en transferencias y devoluciones descartadas. Los sobrantes de conteo se informan aparte.
+   */
+  private async inventoryLosses(r: DateRange) {
+    const events = await this.prisma.$queryRaw<
+      { id: string; at: Date; cause: string; document: string; reference_id: string; kind: string; product: string; lot_code: string; warehouse: string; kg: Num; amount: Num; notes: string | null }[]
+    >`
+      SELECT ia.id, ia.created_at AS at,
+             CASE WHEN ia.kind = 'COUNT' THEN (CASE WHEN ia.weight_kg < 0 THEN 'COUNT_SHORTAGE' ELSE 'COUNT_SURPLUS' END) ELSE ia.reason_code::text END AS cause,
+             ia.adjustment_number AS document, ia.id AS reference_id, 'adjustment' AS kind,
+             p.name AS product, l.lot_code, w.name AS warehouse, -ia.weight_kg AS kg, -ia.amount AS amount, ia.notes
+      FROM inventory_adjustments ia
+      JOIN products p ON p.id = ia.product_id JOIN lots l ON l.id = ia.lot_id JOIN warehouses w ON w.id = ia.warehouse_id
+      WHERE ia.status = 'VALID' AND ${this.inRange('ia.created_at', r)}
+      UNION ALL
+      SELECT ti.id, t.received_at, 'TRANSIT', t.transfer_number, t.id, 'transfer',
+             p.name, l.lot_code, w.name, ti.difference_kg, ti.loss_amount, t.receive_notes
+      FROM transfer_items ti
+      JOIN transfers t ON t.id = ti.transfer_id
+      JOIN products p ON p.id = ti.product_id JOIN lots l ON l.id = ti.lot_id JOIN warehouses w ON w.id = t.destination_warehouse_id
+      WHERE t.status = 'RECEIVED' AND ti.difference_kg > 0 AND ${this.inRange('t.received_at', r)}
+      UNION ALL
+      SELECT sri.id, sr.created_at, 'RETURN_DISCARD', sr.return_number, sr.sale_id, 'return',
+             p.name, l.lot_code, w.name, sri.weight_kg, ROUND(sri.weight_kg * sri.cost_per_kg, 2), sr.reason
+      FROM sale_return_items sri
+      JOIN sale_returns sr ON sr.id = sri.return_id
+      JOIN products p ON p.id = sri.product_id JOIN lots l ON l.id = sri.lot_id JOIN warehouses w ON w.id = sr.warehouse_id
+      WHERE sri.disposition = 'DISCARD' AND ${this.inRange('sr.created_at', r)}
+      ORDER BY at DESC`;
+
+    const byCause = new Map<string, { kg: Prisma.Decimal; amount: Prisma.Decimal; count: number }>();
+    for (const e of events) {
+      const row = byCause.get(e.cause) ?? { kg: ZERO, amount: ZERO, count: 0 };
+      row.kg = row.kg.plus(dec(e.kg));
+      row.amount = row.amount.plus(dec(e.amount));
+      row.count += 1;
+      byCause.set(e.cause, row);
+    }
+    const losses = events.filter((e) => e.cause !== 'COUNT_SURPLUS');
+    const surplus = events.filter((e) => e.cause === 'COUNT_SURPLUS');
+    // En los sobrantes kg y valor llegan negativos (son ganancia); se muestran en positivo.
+    return {
+      totals: {
+        lossKg: kg(losses.reduce((s, e) => s.plus(dec(e.kg)), ZERO)),
+        lossAmount: money(losses.reduce((s, e) => s.plus(dec(e.amount)), ZERO)),
+        surplusKg: kg(surplus.reduce((s, e) => s.minus(dec(e.kg)), ZERO)),
+        surplusAmount: money(surplus.reduce((s, e) => s.minus(dec(e.amount)), ZERO)),
+      },
+      byCause: [...byCause.entries()]
+        .filter(([cause]) => cause !== 'COUNT_SURPLUS')
+        .map(([cause, v]) => ({ cause, kg: kg(v.kg), amount: money(v.amount), count: v.count }))
+        .sort((a, b) => b.amount.comparedTo(a.amount)),
+      events: events.slice(0, 100).map((e) => ({
+        id: e.id,
+        at: e.at,
+        cause: e.cause,
+        document: e.document,
+        kind: e.kind,
+        referenceId: e.reference_id,
+        product: e.product,
+        lotCode: e.lot_code,
+        warehouse: e.warehouse,
+        kg: kg(dec(e.kg)),
+        amount: money(dec(e.amount)),
+        notes: e.notes,
       })),
     };
   }

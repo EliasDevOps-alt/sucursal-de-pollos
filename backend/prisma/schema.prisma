@@ -101,6 +101,7 @@ enum ReceivableMovementType {
   CHARGE // venta a crédito (aumenta la deuda)
   PAYMENT // pago del cliente (reduce la deuda)
   ANNUL // reversión por anulación de venta
+  RETURN // devolución de productos
   ADJUSTMENT
 }
 
@@ -127,6 +128,41 @@ enum SyncStatus {
   SYNCED
   ERROR
   REVIEW
+}
+
+enum TransferStatus {
+  IN_TRANSIT // salió del almacén de origen, aún no se recibe
+  RECEIVED
+  CANCELLED // se canceló en tránsito: el stock vuelve al origen
+}
+
+enum AdjustmentKind {
+  COUNT // conteo físico: el saldo pasa al peso contado (puede subir o bajar)
+  LOSS // baja o pérdida: siempre resta
+}
+
+enum AdjustmentReason {
+  PHYSICAL_COUNT
+  EXPIRED
+  DAMAGED
+  SPOILED
+  THEFT
+  OTHER
+}
+
+enum RecordStatus {
+  VALID
+  ANNULLED
+}
+
+enum ReturnDisposition {
+  RESTOCK // vuelve al stock del mismo lote
+  DISCARD // no se puede revender: se registra como pérdida
+}
+
+enum RefundMethod {
+  CREDIT // se descuenta de la deuda del cliente (o queda como saldo a favor)
+  CASH // se devuelve el dinero en caja
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -184,27 +220,34 @@ model User {
   branch Branch? @relation(fields: [branchId], references: [id])
 
   auditLogs            AuditLog[]
-  purchasesCreated     Purchase[]           @relation("PurchaseCreatedBy")
-  purchasesAnnulled    Purchase[]           @relation("PurchaseAnnulledBy")
+  purchasesCreated     Purchase[]            @relation("PurchaseCreatedBy")
+  purchasesAnnulled    Purchase[]            @relation("PurchaseAnnulledBy")
   receptions           Reception[]
   inventoryMovements   InventoryMovement[]
   customersCreated     Customer[]
   addressesCaptured    CustomerAddress[]
-  sales                Sale[]               @relation("SaleSeller")
-  salesAnnulled        Sale[]               @relation("SaleAnnulledBy")
+  sales                Sale[]                @relation("SaleSeller")
+  salesAnnulled        Sale[]                @relation("SaleAnnulledBy")
   lotOverrides         SaleLotAllocation[]
-  creditAuthorizations Sale[]               @relation("SaleCreditAuthorizedBy")
+  creditAuthorizations Sale[]                @relation("SaleCreditAuthorizedBy")
   priceAuthorizations  SaleItem[]
-  paymentsReceived     Payment[]            @relation("PaymentReceivedBy")
-  paymentsAnnulled     Payment[]            @relation("PaymentAnnulledBy")
+  paymentsReceived     Payment[]             @relation("PaymentReceivedBy")
+  paymentsAnnulled     Payment[]             @relation("PaymentAnnulledBy")
   receivableMovements  ReceivableMovement[]
   presales             Presale[]
   devices              Device[]
-  syncOperations       SyncOperation[]      @relation("SyncOperationUser")
-  syncResolutions      SyncOperation[]      @relation("SyncResolvedBy")
+  syncOperations       SyncOperation[]       @relation("SyncOperationUser")
+  syncResolutions      SyncOperation[]       @relation("SyncResolvedBy")
   visits               Visit[]
   lotPrices            LotPrice[]
   gpsPositions         GpsPosition[]
+  transfersSent        Transfer[]            @relation("TransferSentBy")
+  transfersReceived    Transfer[]            @relation("TransferReceivedBy")
+  transfersCancelled   Transfer[]            @relation("TransferCancelledBy")
+  adjustmentsCreated   InventoryAdjustment[] @relation("AdjustmentCreatedBy")
+  adjustmentsAnnulled  InventoryAdjustment[] @relation("AdjustmentAnnulledBy")
+  returnsCreated       SaleReturn[]          @relation("ReturnCreatedBy")
+  returnsAuthorized    SaleReturn[]          @relation("ReturnAuthorizedBy")
 
   @@map("users")
 }
@@ -272,13 +315,17 @@ model Warehouse {
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
 
-  branch             Branch?             @relation(fields: [branchId], references: [id])
+  branch             Branch?               @relation(fields: [branchId], references: [id])
   purchases          Purchase[]
   receptions         Reception[]
   lots               Lot[]
   inventoryMovements InventoryMovement[]
   inventoryBalances  InventoryBalance[]
   sales              Sale[]
+  transfersOut       Transfer[]            @relation("TransferOrigin")
+  transfersIn        Transfer[]            @relation("TransferDestination")
+  adjustments        InventoryAdjustment[]
+  returns            SaleReturn[]
 
   @@map("warehouses")
 }
@@ -310,7 +357,7 @@ model Product {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  category           ProductCategory     @relation(fields: [categoryId], references: [id])
+  category           ProductCategory       @relation(fields: [categoryId], references: [id])
   purchaseItems      PurchaseItem[]
   receptionItems     ReceptionItem[]
   lots               Lot[]
@@ -318,6 +365,9 @@ model Product {
   inventoryBalances  InventoryBalance[]
   saleItems          SaleItem[]
   presaleItems       PresaleItem[]
+  transferItems      TransferItem[]
+  adjustments        InventoryAdjustment[]
+  returnItems        SaleReturnItem[]
 
   @@map("products")
 }
@@ -469,15 +519,18 @@ model Lot {
   status              LotStatus          @default(ACTIVE)
   createdAt           DateTime           @default(now()) @map("created_at")
 
-  product            Product             @relation(fields: [productId], references: [id])
-  purchase           Purchase            @relation(fields: [purchaseId], references: [id])
-  reception          Reception           @relation(fields: [receptionId], references: [id])
-  receptionItem      ReceptionItem       @relation(fields: [receptionItemId], references: [id])
-  warehouse          Warehouse           @relation(fields: [warehouseId], references: [id])
+  product            Product               @relation(fields: [productId], references: [id])
+  purchase           Purchase              @relation(fields: [purchaseId], references: [id])
+  reception          Reception             @relation(fields: [receptionId], references: [id])
+  receptionItem      ReceptionItem         @relation(fields: [receptionItemId], references: [id])
+  warehouse          Warehouse             @relation(fields: [warehouseId], references: [id])
   prices             LotPrice[]
   inventoryMovements InventoryMovement[]
   inventoryBalances  InventoryBalance[]
   saleAllocations    SaleLotAllocation[]
+  transferItems      TransferItem[]
+  adjustments        InventoryAdjustment[]
+  returnItems        SaleReturnItem[]
 
   @@index([productId, expiryDate])
   @@map("lots")
@@ -583,6 +636,7 @@ model Customer {
   payments            Payment[]
   receivableMovements ReceivableMovement[]
   visits              Visit[]
+  returns             SaleReturn[]
 
   @@map("customers")
 }
@@ -626,6 +680,7 @@ model Sale {
   paymentStatus         PaymentStatus @map("payment_status")
   paidAmount            Decimal       @default(0) @map("paid_amount") @db.Decimal(14, 2) // pagado al momento de la venta
   creditAmount          Decimal       @default(0) @map("credit_amount") @db.Decimal(14, 2) // saldo cargado a la deuda
+  returnedAmount        Decimal       @default(0) @map("returned_amount") @db.Decimal(14, 2) // devuelto al cliente
   status                SaleStatus    @default(CONFIRMED)
   creditAuthorizedById  String?       @map("credit_authorized_by_id") @db.Uuid // excepción al límite de crédito
   creditExceptionReason String?       @map("credit_exception_reason")
@@ -635,15 +690,16 @@ model Sale {
   annulledById          String?       @map("annulled_by_id") @db.Uuid
   annulReason           String?       @map("annul_reason")
 
-  customer           Customer?  @relation(fields: [customerId], references: [id])
-  warehouse          Warehouse  @relation(fields: [warehouseId], references: [id])
-  branch             Branch?    @relation(fields: [branchId], references: [id])
-  seller             User       @relation("SaleSeller", fields: [sellerId], references: [id])
-  annulledBy         User?      @relation("SaleAnnulledBy", fields: [annulledById], references: [id])
-  creditAuthorizedBy User?      @relation("SaleCreditAuthorizedBy", fields: [creditAuthorizedById], references: [id])
+  customer           Customer?    @relation(fields: [customerId], references: [id])
+  warehouse          Warehouse    @relation(fields: [warehouseId], references: [id])
+  branch             Branch?      @relation(fields: [branchId], references: [id])
+  seller             User         @relation("SaleSeller", fields: [sellerId], references: [id])
+  annulledBy         User?        @relation("SaleAnnulledBy", fields: [annulledById], references: [id])
+  creditAuthorizedBy User?        @relation("SaleCreditAuthorizedBy", fields: [creditAuthorizedById], references: [id])
   items              SaleItem[]
   presale            Presale?
   payments           Payment[]
+  returns            SaleReturn[]
 
   @@index([customerId, createdAt])
   @@index([createdAt])
@@ -660,6 +716,8 @@ model SaleItem {
   unitPrice           Decimal @map("unit_price") @db.Decimal(14, 4) // precio final aplicado
   discountAmount      Decimal @default(0) @map("discount_amount") @db.Decimal(14, 2)
   subtotal            Decimal @db.Decimal(14, 2) // después del descuento
+  returnedWeightKg    Decimal @default(0) @map("returned_weight_kg") @db.Decimal(14, 3)
+  returnedAmount      Decimal @default(0) @map("returned_amount") @db.Decimal(14, 2)
   priceChangeReason   String? @map("price_change_reason")
   priceAuthorizedById String? @map("price_authorized_by_id") @db.Uuid
 
@@ -667,27 +725,31 @@ model SaleItem {
   product           Product             @relation(fields: [productId], references: [id])
   priceAuthorizedBy User?               @relation(fields: [priceAuthorizedById], references: [id])
   allocations       SaleLotAllocation[]
+  returnItems       SaleReturnItem[]
 
   @@map("sale_items")
 }
 
 // Una línea de venta puede consumirse de varios lotes; se congela el costo de cada uno.
 model SaleLotAllocation {
-  id             String   @id @default(uuid()) @db.Uuid
-  saleItemId     String   @map("sale_item_id") @db.Uuid
-  lotId          String   @map("lot_id") @db.Uuid
-  weightKg       Decimal  @map("weight_kg") @db.Decimal(14, 3)
-  quantity       Decimal  @default(0) @db.Decimal(14, 3)
-  costPerKg      Decimal  @map("cost_per_kg") @db.Decimal(14, 4)
-  salePricePerKg Decimal  @map("sale_price_per_kg") @db.Decimal(14, 4)
-  forcedLot      Boolean  @default(false) @map("forced_lot") // se saltó la prioridad FEFO
-  authorizedById String?  @map("authorized_by_id") @db.Uuid
-  forceReason    String?  @map("force_reason")
-  createdAt      DateTime @default(now()) @map("created_at")
+  id                String   @id @default(uuid()) @db.Uuid
+  saleItemId        String   @map("sale_item_id") @db.Uuid
+  lotId             String   @map("lot_id") @db.Uuid
+  weightKg          Decimal  @map("weight_kg") @db.Decimal(14, 3)
+  quantity          Decimal  @default(0) @db.Decimal(14, 3)
+  costPerKg         Decimal  @map("cost_per_kg") @db.Decimal(14, 4)
+  salePricePerKg    Decimal  @map("sale_price_per_kg") @db.Decimal(14, 4)
+  forcedLot         Boolean  @default(false) @map("forced_lot") // se saltó la prioridad FEFO
+  authorizedById    String?  @map("authorized_by_id") @db.Uuid
+  forceReason       String?  @map("force_reason")
+  returnedWeightKg  Decimal  @default(0) @map("returned_weight_kg") @db.Decimal(14, 3)
+  restockedWeightKg Decimal  @default(0) @map("restocked_weight_kg") @db.Decimal(14, 3) // parte devuelta que volvió al stock
+  createdAt         DateTime @default(now()) @map("created_at")
 
-  saleItem     SaleItem @relation(fields: [saleItemId], references: [id])
-  lot          Lot      @relation(fields: [lotId], references: [id])
-  authorizedBy User?    @relation(fields: [authorizedById], references: [id])
+  saleItem     SaleItem         @relation(fields: [saleItemId], references: [id])
+  lot          Lot              @relation(fields: [lotId], references: [id])
+  authorizedBy User?            @relation(fields: [authorizedById], references: [id])
+  returnItems  SaleReturnItem[]
 
   @@index([lotId])
   @@map("sale_lot_allocations")
@@ -877,4 +939,135 @@ model GpsPosition {
 
   @@index([userId, capturedAtDevice])
   @@map("gps_positions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Inventario operativo: transferencias, ajustes y bajas, devoluciones
+// ─────────────────────────────────────────────────────────────
+
+model Transfer {
+  id                     String         @id @default(uuid()) @db.Uuid
+  transferNumber         String         @unique @map("transfer_number")
+  originWarehouseId      String         @map("origin_warehouse_id") @db.Uuid
+  destinationWarehouseId String         @map("destination_warehouse_id") @db.Uuid
+  status                 TransferStatus @default(IN_TRANSIT)
+  notes                  String?
+  sentById               String         @map("sent_by_id") @db.Uuid
+  sentAt                 DateTime       @default(now()) @map("sent_at")
+  receivedById           String?        @map("received_by_id") @db.Uuid
+  receivedAt             DateTime?      @map("received_at")
+  receiveNotes           String?        @map("receive_notes")
+  cancelledById          String?        @map("cancelled_by_id") @db.Uuid
+  cancelledAt            DateTime?      @map("cancelled_at")
+  cancelReason           String?        @map("cancel_reason")
+
+  origin      Warehouse      @relation("TransferOrigin", fields: [originWarehouseId], references: [id])
+  destination Warehouse      @relation("TransferDestination", fields: [destinationWarehouseId], references: [id])
+  sentBy      User           @relation("TransferSentBy", fields: [sentById], references: [id])
+  receivedBy  User?          @relation("TransferReceivedBy", fields: [receivedById], references: [id])
+  cancelledBy User?          @relation("TransferCancelledBy", fields: [cancelledById], references: [id])
+  items       TransferItem[]
+
+  @@index([status, sentAt])
+  @@map("transfers")
+}
+
+model TransferItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  transferId       String   @map("transfer_id") @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  lotId            String   @map("lot_id") @db.Uuid
+  sentWeightKg     Decimal  @map("sent_weight_kg") @db.Decimal(14, 3)
+  sentQuantity     Decimal  @default(0) @map("sent_quantity") @db.Decimal(14, 3)
+  receivedWeightKg Decimal? @map("received_weight_kg") @db.Decimal(14, 3)
+  receivedQuantity Decimal? @map("received_quantity") @db.Decimal(14, 3)
+  differenceKg     Decimal  @default(0) @map("difference_kg") @db.Decimal(14, 3) // enviado − recibido (pérdida en tránsito)
+  costPerKg        Decimal  @map("cost_per_kg") @db.Decimal(14, 4)
+  lossAmount       Decimal  @default(0) @map("loss_amount") @db.Decimal(14, 2)
+
+  transfer Transfer @relation(fields: [transferId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+  lot      Lot      @relation(fields: [lotId], references: [id])
+
+  @@map("transfer_items")
+}
+
+model InventoryAdjustment {
+  id               String           @id @default(uuid()) @db.Uuid
+  adjustmentNumber String           @unique @map("adjustment_number")
+  kind             AdjustmentKind
+  reasonCode       AdjustmentReason @map("reason_code")
+  warehouseId      String           @map("warehouse_id") @db.Uuid
+  productId        String           @map("product_id") @db.Uuid
+  lotId            String           @map("lot_id") @db.Uuid
+  systemWeightKg   Decimal          @map("system_weight_kg") @db.Decimal(14, 3) // saldo antes del ajuste
+  newWeightKg      Decimal          @map("new_weight_kg") @db.Decimal(14, 3) // saldo después
+  weightKg         Decimal          @map("weight_kg") @db.Decimal(14, 3) // diferencia con signo
+  quantity         Decimal          @default(0) @db.Decimal(14, 3) // diferencia en unidades, con signo
+  costPerKg        Decimal          @map("cost_per_kg") @db.Decimal(14, 4)
+  amount           Decimal          @db.Decimal(14, 2) // valor de la diferencia, con signo (negativo = pérdida)
+  notes            String
+  status           RecordStatus     @default(VALID)
+  createdById      String           @map("created_by_id") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at")
+  annulledById     String?          @map("annulled_by_id") @db.Uuid
+  annulledAt       DateTime?        @map("annulled_at")
+  annulReason      String?          @map("annul_reason")
+
+  warehouse  Warehouse @relation(fields: [warehouseId], references: [id])
+  product    Product   @relation(fields: [productId], references: [id])
+  lot        Lot       @relation(fields: [lotId], references: [id])
+  createdBy  User      @relation("AdjustmentCreatedBy", fields: [createdById], references: [id])
+  annulledBy User?     @relation("AdjustmentAnnulledBy", fields: [annulledById], references: [id])
+
+  @@index([createdAt])
+  @@map("inventory_adjustments")
+}
+
+model SaleReturn {
+  id             String       @id @default(uuid()) @db.Uuid
+  returnNumber   String       @unique @map("return_number")
+  saleId         String       @map("sale_id") @db.Uuid
+  customerId     String?      @map("customer_id") @db.Uuid
+  warehouseId    String       @map("warehouse_id") @db.Uuid
+  reason         String
+  refundMethod   RefundMethod @map("refund_method")
+  totalAmount    Decimal      @map("total_amount") @db.Decimal(14, 2)
+  restockedKg    Decimal      @default(0) @map("restocked_kg") @db.Decimal(14, 3)
+  discardedKg    Decimal      @default(0) @map("discarded_kg") @db.Decimal(14, 3)
+  lossAmount     Decimal      @default(0) @map("loss_amount") @db.Decimal(14, 2) // costo de lo descartado
+  authorizedById String       @map("authorized_by_id") @db.Uuid
+  createdById    String       @map("created_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  sale         Sale             @relation(fields: [saleId], references: [id])
+  customer     Customer?        @relation(fields: [customerId], references: [id])
+  warehouse    Warehouse        @relation(fields: [warehouseId], references: [id])
+  authorizedBy User             @relation("ReturnAuthorizedBy", fields: [authorizedById], references: [id])
+  createdBy    User             @relation("ReturnCreatedBy", fields: [createdById], references: [id])
+  items        SaleReturnItem[]
+
+  @@index([createdAt])
+  @@map("sale_returns")
+}
+
+model SaleReturnItem {
+  id           String            @id @default(uuid()) @db.Uuid
+  returnId     String            @map("return_id") @db.Uuid
+  saleItemId   String            @map("sale_item_id") @db.Uuid
+  allocationId String            @map("allocation_id") @db.Uuid
+  productId    String            @map("product_id") @db.Uuid
+  lotId        String            @map("lot_id") @db.Uuid
+  weightKg     Decimal           @map("weight_kg") @db.Decimal(14, 3)
+  amount       Decimal           @db.Decimal(14, 2)
+  costPerKg    Decimal           @map("cost_per_kg") @db.Decimal(14, 4)
+  disposition  ReturnDisposition
+
+  saleReturn SaleReturn        @relation(fields: [returnId], references: [id])
+  saleItem   SaleItem          @relation(fields: [saleItemId], references: [id])
+  allocation SaleLotAllocation @relation(fields: [allocationId], references: [id])
+  product    Product           @relation(fields: [productId], references: [id])
+  lot        Lot               @relation(fields: [lotId], references: [id])
+
+  @@map("sale_return_items")
 }

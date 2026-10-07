@@ -34,6 +34,29 @@ export class InventoryQueryService {
       .sort((a, b) => a.product.name.localeCompare(b.product.name));
   }
 
+  /** Saldo por lote en un almacén (incluye vencidos, para poder darlos de baja), en orden FEFO. */
+  async lotBalances(warehouseId: string, productId?: string) {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date());
+    const rows = await this.prisma.inventoryBalance.findMany({
+      where: { warehouseId, productId, weightKg: { gt: 0 } },
+      include: {
+        product: { select: { id: true, code: true, name: true } },
+        lot: { select: { id: true, lotCode: true, expiryDate: true, actualCostPerKg: true, status: true } },
+      },
+      orderBy: [{ lot: { expiryDate: 'asc' } }, { lot: { createdAt: 'asc' } }],
+    });
+    return rows.map((b) => ({
+      lotId: b.lotId,
+      lotCode: b.lot.lotCode,
+      product: b.product,
+      expiryDate: b.lot.expiryDate,
+      expired: b.lot.expiryDate.toISOString().slice(0, 10) < today,
+      weightKg: kg(D(b.weightKg)),
+      costPerKg: b.lot.actualCostPerKg,
+      value: money(D(b.weightKg).times(b.lot.actualCostPerKg)),
+    }));
+  }
+
   /** Kardex general (todos los lotes) con filtros. */
   movements(f: { productId?: string; warehouseId?: string; from?: string; to?: string }) {
     const movementDate: Prisma.DateTimeFilter = {};
