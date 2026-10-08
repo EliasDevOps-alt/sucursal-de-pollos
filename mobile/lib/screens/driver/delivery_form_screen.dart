@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
 import '../../state/app_state.dart';
+import '../counter_field.dart';
 import '../format.dart';
 import 'signature_pad.dart';
 import 'stop_screen.dart' show paymentLabels;
@@ -41,6 +42,8 @@ class _DeliveryFormScreenState extends State<DeliveryFormScreen> {
   final _notes = TextEditingController();
   final _signature = SignatureController();
   bool _signing = false;
+  int _cratesOut = 0;
+  int _cratesIn = 0;
   bool _saving = false;
 
   @override
@@ -102,6 +105,8 @@ class _DeliveryFormScreenState extends State<DeliveryFormScreen> {
         signaturePng: png,
         notes: _notes.text,
         location: location,
+        cratesDelivered: _cratesOut,
+        cratesPickedUp: _cratesIn,
       );
       if (!mounted) return;
       Navigator.pop(context); // formulario
@@ -198,6 +203,15 @@ class _DeliveryFormScreenState extends State<DeliveryFormScreen> {
                 ),
               ),
             ),
+          const Divider(height: 32),
+          CounterField(label: 'Canastillos que deja', hint: 'llenos, quedan con el cliente', value: _cratesOut, onChanged: (v) => setState(() => _cratesOut = v)),
+          const SizedBox(height: 8),
+          CounterField(
+            label: 'Canastillos vacíos que recoge',
+            hint: (_customer?.cratesHeld ?? 0) > 0 ? 'Tiene ${_customer!.cratesHeld} registrados' : null,
+            value: _cratesIn,
+            onChanged: (v) => setState(() => _cratesIn = v),
+          ),
           const Divider(height: 32),
           TextField(controller: _receiver, decoration: const InputDecoration(labelText: 'Quién recibe', border: OutlineInputBorder()), textCapitalization: TextCapitalization.words, onChanged: (_) => setState(() {})),
           const SizedBox(height: 12),

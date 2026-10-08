@@ -94,6 +94,7 @@ const TIME_COLUMNS: [string, string[]][] = [
   ['delivery_routes', ['created_at', 'dispatched_at', 'closed_at', 'cancelled_at']],
   ['route_stops', ['resolved_at_device', 'resolved_at']],
   ['vehicles', ['created_at', 'updated_at']],
+  ['crate_movements', ['created_at']],
 ];
 
 /** Mueve lo creado desde `realStart` a la ventana [windowStart, windowEnd], conservando el orden relativo. */
@@ -160,7 +161,7 @@ const KG_BY_TYPE: Record<string, [number, number]> = {
   quick: [2, 12],
 };
 
-const stats = { purchases: 0, sales: 0, presales: 0, attended: 0, credit: 0, skippedLines: 0, transfers: 0, branchSales: 0, routes: 0, failedStops: 0, events: [] as string[] };
+const stats = { purchases: 0, sales: 0, presales: 0, attended: 0, credit: 0, skippedLines: 0, transfers: 0, branchSales: 0, routes: 0, failedStops: 0, collections: 0, events: [] as string[] };
 // Las compras cubren también lo que se envía a la sucursal.
 const BRANCH_SUPPLY = 1.06;
 
@@ -173,7 +174,7 @@ async function main() {
 
   // ── 1. Limpieza ──────────────────────────────────────────
   console.log('Limpiando operaciones…');
-  await prisma.$executeRawUnsafe(`TRUNCATE route_stop_items, route_stops, delivery_routes, vehicles,
+  await prisma.$executeRawUnsafe(`TRUNCATE crate_movements, crate_balances, route_stop_items, route_stops, delivery_routes, vehicles,
     sale_return_items, sale_returns, transfer_items, transfers, inventory_adjustments,
     presale_items, presales, sale_lot_allocations, sale_items, payments, receivable_movements,
     sales, inventory_movements, inventory_balances, lot_prices, lots, reception_items, receptions, purchase_items, purchases,
@@ -182,7 +183,7 @@ async function main() {
   // Los almacenes móviles se recrean con los vehículos.
   await prisma.$executeRawUnsafe(`DELETE FROM warehouses WHERE type = 'VEHICLE'`);
   // Usuarios y tipos de cliente creados al probar (no los del seed) se retiran; ya no tienen operaciones asociadas.
-  await prisma.$executeRawUnsafe(`DELETE FROM users WHERE username NOT IN ('admin', 'vcentral', 'vsucursal', 'preventista', 'contador', 'chofer')`);
+  await prisma.$executeRawUnsafe(`DELETE FROM users WHERE username NOT IN ('admin', 'vcentral', 'vsucursal', 'preventista', 'contador', 'chofer', 'cobrador')`);
   await prisma.$executeRawUnsafe(`DELETE FROM customer_types WHERE name NOT IN ('Tienda', 'Mercado', 'Mayorista', 'Persona particular', 'Otro')`);
   await prisma.$executeRawUnsafe(`UPDATE customer_types SET is_active = true`);
   await prisma.$executeRawUnsafe(`UPDATE users SET is_active = true`);
@@ -236,6 +237,13 @@ async function main() {
   ];
   const drivers: any[] = await api('GET', '/routes/drivers', admin);
   const driverId = drivers.find((x) => x.username === 'chofer')!.id;
+  const collector = await login('cobrador', 'Demo123!', 'mobile');
+
+  // Canastillos del negocio: inventario inicial en el central y una parte en la sucursal.
+  await api('POST', '/crates/movements', admin, { type: 'INITIAL', quantity: 220, to: { type: 'WAREHOUSE', id: central.id }, reason: 'Inventario inicial de canastillos' });
+  await api('POST', '/crates/movements', admin, {
+    type: 'TRANSFER', quantity: 30, from: { type: 'WAREHOUSE', id: central.id }, to: { type: 'WAREHOUSE', id: branchWh.id }, reason: 'Dotación de la sucursal',
+  });
 
   // ── 3. Días ──────────────────────────────────────────────
   const costs = Object.fromEntries(Object.entries(PLAN).map(([code, p]) => [code, p.baseCost]));
@@ -321,6 +329,10 @@ async function main() {
     if (daysAgo === 5) await damagedLoss(admin, central.id);
     if (daysAgo === 3) await returnSale(seller, ADMIN_AUTH, 'RESTOCK');
     if (daysAgo === 1) await returnSale(seller, ADMIN_AUTH, 'DISCARD');
+
+    // Cobrador: ronda de cobranza por la tarde (no los domingos).
+    if (weekday !== 0 && d > 2) await collectorRound(collector, isToday, admin, central.id);
+    if (daysAgo === 8) await crateSanction(admin);
 
     // Eventos para mostrar controles en la demo.
     if (daysAgo === 6) await annulOne(admin);
@@ -410,7 +422,7 @@ async function main() {
   console.log(`  ${stats.purchases} compras · ${stats.sales} ventas (${stats.credit} con crédito) · ${stats.presales} preventas (${stats.attended} atendidas, ${pendingNow} pendientes)`);
   console.log(`  Ventas confirmadas: Bs ${Number(revenue).toFixed(2)} · Por cobrar: Bs ${Number(debt).toFixed(2)} · Stock: ${Number(stock).toFixed(1)} kg`);
   console.log(`  ${stats.transfers} transferencias a la sucursal · ${stats.branchSales} ventas en sucursal`);
-  console.log(`  ${stats.routes} rutas de entrega · ${stats.failedStops} paradas no entregadas`);
+  console.log(`  ${stats.routes} rutas de entrega · ${stats.failedStops} paradas no entregadas · ${stats.collections} cobros en la calle`);
   console.log(`  Líneas omitidas por falta de stock: ${stats.skippedLines}`);
   for (const e of stats.events) console.log(`  · ${e}`);
 }
@@ -459,7 +471,8 @@ async function annulOne(admin: string) {
 /** Producto entero con más stock vendible en el almacén (con al menos `minLots` lotes), para los eventos de la demo. */
 async function richestProduct(admin: string, byCode: any, wh: string, minLots = 1) {
   let best: { product: any; lots: any[]; kg: number } | null = null;
-  for (const code of ['PE-SOF', 'PE-PIO', 'PE-GRA']) {
+  // Primero pollo entero; si ninguno tiene suficientes lotes, cualquier producto.
+  for (const code of minLots > 1 ? Object.keys(PLAN) : ['PE-SOF', 'PE-PIO', 'PE-GRA']) {
     const lots: any[] = await api('GET', `/sales/available-lots?warehouseId=${wh}&productId=${byCode[code].id}`, admin);
     const kg = lots.reduce((t, l) => t + Number(l.availableKg), 0);
     if (lots.length >= minLots && (!best || kg > best.kg)) best = { product: byCode[code], lots, kg };
@@ -622,6 +635,7 @@ async function runRoute(o: { admin: string; driver: string; driverId: string; ve
   let route: any = await api('POST', '/routes', o.admin, { routeDate: o.day, vehicleId: o.vehicle.id, driverId: o.driverId, stops: fits.map((p) => ({ presaleId: p.id })) });
   // Un pequeño margen sobre lo pedido (los pollos se pesan al entregar), si hay stock.
   route = await api('POST', `/routes/${route.id}/dispatch`, o.admin, {
+    cratesLoaded: Math.min(route.summary.estimatedCrates + 2, o.vehicle.capacityCrates, await centralCrates()),
     loads: route.loadSheet.map((l: any) => ({ productId: l.productId, weightKg: r3(Number(l.orderedKg) + Math.min(Number(l.orderedKg) * 0.03, Math.max(0, stock.get(l.productId) ?? 0))) })),
   });
   stats.routes++;
@@ -663,6 +677,9 @@ async function runRoute(o: { admin: string; driver: string; driverId: string; ve
       delivery = op('DELIVERY_COMPLETE', {
         stopId: stop.id, items, paidAmount: paid, paymentMethod: paid > 0 ? weighted([['EFECTIVO', 7], ['QR', 3]]) : undefined,
         receivedByName: pick(RECEIVERS), signature: signaturePng(), ...at,
+        // Llenos según los kilos (≈ 20 kg por canastillo) y vacíos que el cliente tenía de antes.
+        cratesDelivered: Math.ceil(items.reduce((t: number, i: any) => t + i.deliveredWeightKg, 0) / 20),
+        cratesPickedUp: Math.min(customerCrates.get(stop.customer.id) ?? 0, int(0, 4)),
       });
     }
     const results: any[] = (await api<any>('POST', '/mobile/sync', o.driver, { deviceUuid: 'demo-chofer-android', appVersion: '0.2.0', operations: [...gps, delivery] })).results;
@@ -675,12 +692,18 @@ async function runRoute(o: { admin: string; driver: string; driverId: string; ve
     } else if (delivery.operationType === 'DELIVERY_COMPLETE') {
       stats.attended++;
       stats.sales++;
+      const held = customerCrates.get(stop.customer.id) ?? 0;
+      customerCrates.set(stop.customer.id, held + delivery.payload.cratesDelivered - delivery.payload.cratesPickedUp);
     }
   }
   if (!o.partial) {
     // Liquidación: a veces falta un poco al pesar el sobrante.
     const veh: any[] = await api('GET', `/inventory/lots?warehouseId=${o.vehicle.warehouseId}`, o.admin);
+    const now: any = await api('GET', `/routes/${route.id}`, o.admin);
+    const expected = Math.max(0, now.summary.crates.expectedBack);
     await api('POST', `/routes/${route.id}/close`, o.admin, {
+      // A veces falta un canastillo: queda a cargo del chofer.
+      cratesReturned: expected > 0 && rand() < 0.15 ? expected - 1 : expected,
       returns: veh.map((l, idx) => ({ lotId: l.lotId, receivedWeightKg: idx === 0 && rand() < 0.3 ? r3(Math.max(0, Number(l.weightKg) - between(0.1, 0.4))) : Number(l.weightKg) })),
       notes: 'Sobrante pesado al volver',
     });
@@ -688,6 +711,63 @@ async function runRoute(o: { admin: string; driver: string; driverId: string; ve
     stats.events.push(`Ruta ${route.routeNumber} en curso: ${upto} de ${stops.length} paradas entregadas (el resto, pendiente para la demo)`);
   }
   return retry;
+}
+
+// ── Canastillos y cobranza ──────────────────────────────────
+
+/** Canastillos que cada cliente tiene según el sistema (para que los recojos sean coherentes). */
+const customerCrates = new Map<string, number>();
+
+async function centralCrates() {
+  const central = await prisma.warehouse.findFirstOrThrow({ where: { code: 'ALM-CEN' } });
+  const b = await prisma.crateBalance.findUnique({ where: { holderType_holderId: { holderType: 'WAREHOUSE', holderId: central.id } } });
+  return Math.max(0, b?.quantity ?? 0);
+}
+
+/** El cobrador visita a los que más deben: cobra una parte o todo, con firma, y recoge canastillos vacíos. */
+async function collectorRound(collector: string, isToday: boolean, admin: string, centralId: string) {
+  const debtors = await prisma.customer.findMany({ where: { currentDebt: { gt: 50 } }, include: { addresses: true }, orderBy: { currentDebt: 'desc' }, take: 8 });
+  const visits = debtors.sort(() => rand() - 0.5).slice(0, isToday ? 2 : int(2, 3));
+  const ops: any[] = [];
+  for (const c of visits) {
+    const debt = Number(c.currentDebt);
+    const amount = r2(rand() < 0.15 ? debt : Math.max(20, Math.round(debt * between(0.2, 0.45))));
+    const held = customerCrates.get(c.id) ?? 0;
+    const crates = Math.min(held, int(0, 3));
+    const a = c.addresses[0];
+    const at = a?.latitude ? { latitude: Number(a.latitude) + between(-0.0003, 0.0003), longitude: Number(a.longitude) + between(-0.0003, 0.0003) } : {};
+    const id = randomUUID();
+    if ('latitude' in at) ops.push(op('GPS_POSITION', { ...at, accuracyMeters: r2(between(4, 12)), eventType: 'COLLECTION', referenceId: id }));
+    ops.push(op('COLLECTION_CREATE', {
+      id, customerId: c.id, amount, paymentMethod: weighted([['EFECTIVO', 6], ['QR', 3], ['TRANSFERENCIA', 1]]),
+      ...(rand() < 0.4 ? { referenceNumber: `QR-${int(100000, 999999)}` } : {}),
+      paidByName: pick(RECEIVERS), signature: signaturePng(), cratesPickedUp: crates || undefined, ...at,
+    }));
+    if (crates) customerCrates.set(c.id, held - crates);
+  }
+  // Los vacíos que el cobrador recoge los entrega en el central al terminar la ronda.
+  if (ops.length) {
+    const res: any = await api('POST', '/mobile/sync', collector, { deviceUuid: 'demo-cobrador-android', appVersion: '0.3.0', operations: ops });
+    stats.collections += res.results.filter((r: any) => r.status === 'SYNCED' && r.reference).length;
+  }
+  const picked = ops.filter((o) => o.operationType === 'COLLECTION_CREATE').reduce((t, o) => t + (o.payload.cratesPickedUp ?? 0), 0);
+  if (picked > 0 && !isToday) {
+    const me = await prisma.user.findUniqueOrThrow({ where: { username: 'cobrador' } });
+    await api('POST', '/crates/movements', admin, {
+      type: 'RETURN', quantity: picked, from: { type: 'USER', id: me.id }, to: { type: 'WAREHOUSE', id: centralId }, reason: 'Entrega del cobrador al terminar la ronda',
+    });
+  }
+}
+
+/** Un cliente perdió canastillos: se dan de baja y se le cobra una sanción. */
+async function crateSanction(admin: string) {
+  const holder = [...customerCrates.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (!holder || holder[1] < 2) return;
+  const mv: any = await api('POST', '/crates/movements', admin, {
+    type: 'WRITE_OFF', quantity: 2, from: { type: 'CUSTOMER', id: holder[0] }, reason: 'El cliente informó que se le perdieron', chargePerCrate: 35,
+  });
+  customerCrates.set(holder[0], holder[1] - 2);
+  stats.events.push(`Baja de 2 canastillos perdidos por ${mv.from.name}, con sanción de Bs 70`);
 }
 
 // ── Sucursal e inventario operativo ─────────────────────────

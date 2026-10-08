@@ -1,10 +1,11 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { PresaleStatus, Prisma, RouteStatus, StopStatus, TransferStatus, WarehouseType } from '@prisma/client';
+import { CrateHolderType, CrateMovementType, PresaleStatus, Prisma, RouteStatus, StopStatus, TransferStatus, WarehouseType } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { AuthUser } from '../auth/auth-user';
 import { PERMISSIONS } from '../auth/permissions';
 import { D, kg, money, ZERO } from '../common/decimal';
 import { SequenceService } from '../common/sequence.service';
+import { CratesService } from '../crates/crates.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesService } from '../sales/sales.service';
 import { TransfersService } from '../transfers/transfers.service';
@@ -56,6 +57,7 @@ export class RoutesService {
     private readonly transfers: TransfersService,
     private readonly sales: SalesService,
     private readonly audit: AuditService,
+    private readonly crates: CratesService,
   ) {}
 
   // ── Consultas ───────────────────────────────────────────
@@ -255,9 +257,22 @@ export class RoutesService {
         actor,
       );
       await this.transfers.receiveInTx(tx, transferId, { notes: 'Cargado en el vehículo al despachar' }, actor);
+      const crates = dto.cratesLoaded ?? 0;
+      if (crates > full.vehicle.capacityCrates) throw new BadRequestException(`El vehículo lleva como máximo ${full.vehicle.capacityCrates} canastillos`);
+      if (crates > 0) {
+        await this.crates.move(tx, {
+          type: CrateMovementType.DISPATCH,
+          quantity: crates,
+          from: { type: CrateHolderType.WAREHOUSE, id: route.originWarehouseId },
+          to: { type: CrateHolderType.WAREHOUSE, id: full.vehicle.warehouseId },
+          referenceType: 'route',
+          referenceId: id,
+          actorId: actor.id,
+        });
+      }
       await tx.deliveryRoute.update({
         where: { id },
-        data: { status: RouteStatus.IN_PROGRESS, dispatchedAt: new Date(), dispatchedById: actor.id, loadTransferId: transferId },
+        data: { status: RouteStatus.IN_PROGRESS, dispatchedAt: new Date(), dispatchedById: actor.id, loadTransferId: transferId, cratesLoaded: crates },
       });
       await this.audit.log({ userId: actor.id, action: 'routes.dispatch', entityType: 'route', entityId: id, newData: { loads: items, totalKg: total.toFixed(3) } }, tx);
     }, TX_OPTIONS);
@@ -317,9 +332,12 @@ export class RoutesService {
       });
     }
     const sale = await tx.sale.findUniqueOrThrow({ where: { id: saleId } });
+    await this.moveStopCrates(tx, route, stop, dto.cratesDelivered ?? 0, dto.cratesPickedUp ?? 0, actor);
     await tx.routeStop.update({
       where: { id: stop.id },
       data: {
+        cratesDelivered: dto.cratesDelivered ?? 0,
+        cratesPickedUp: dto.cratesPickedUp ?? 0,
         status: anyDifference ? StopStatus.PARTIAL : StopStatus.DELIVERED,
         saleId,
         receivedByName: dto.receivedByName.trim(),
@@ -358,9 +376,11 @@ export class RoutesService {
   async failInTx(tx: Tx, stopId: string, dto: FailStopDto, actor: AuthUser, device?: { at: Date; operationId: string }) {
     const { stop, route } = await this.lockStop(tx, stopId, actor);
     if (dto.problemType === 'OTHER' && !dto.notes?.trim()) throw new BadRequestException('Describa el problema');
+    await this.moveStopCrates(tx, route, stop, 0, dto.cratesPickedUp ?? 0, actor);
     await tx.routeStop.update({
       where: { id: stop.id },
       data: {
+        cratesPickedUp: dto.cratesPickedUp ?? 0,
         status: StopStatus.FAILED,
         problemType: dto.problemType,
         notes: dto.notes?.trim() || null,
@@ -435,9 +455,10 @@ export class RoutesService {
           actor,
         );
       }
+      const crates = await this.reconcileCrates(tx, route, full.vehicle.warehouseId, dto.cratesReturned, actor);
       await tx.deliveryRoute.update({
         where: { id },
-        data: { status: RouteStatus.COMPLETED, closedAt: new Date(), closedById: actor.id, closeNotes: dto.notes, returnTransferId },
+        data: { status: RouteStatus.COMPLETED, closedAt: new Date(), closedById: actor.id, closeNotes: dto.notes, returnTransferId, cratesReturned: crates.returned },
       });
       await this.audit.log(
         { userId: actor.id, action: 'routes.close', entityType: 'route', entityId: id, newData: { notVisited: pending.length, returnedLots: balances.length }, reason: dto.notes },
@@ -445,6 +466,56 @@ export class RoutesService {
       );
     }, TX_OPTIONS);
     return this.findOne(id);
+  }
+
+  // ── Canastillos ─────────────────────────────────────────
+
+  /** En cada parada: los llenos quedan con el cliente y los vacíos que devuelve suben al vehículo. */
+  private async moveStopCrates(tx: Tx, route: { id: string; routeNumber: string; vehicle: { warehouseId: string } }, stop: { id: string; customerId: string }, delivered: number, pickedUp: number, actor: AuthUser) {
+    const vehicle = { type: CrateHolderType.WAREHOUSE, id: route.vehicle.warehouseId };
+    const customer = { type: CrateHolderType.CUSTOMER, id: stop.customerId };
+    if (delivered > 0) {
+      // El conteo del chofer manda: si el vehículo no tenía registrados tantos, la diferencia se ve al liquidar.
+      await this.crates.move(tx, { type: CrateMovementType.DELIVERY, quantity: delivered, from: vehicle, to: customer, referenceType: 'route_stop', referenceId: stop.id, actorId: actor.id, allowNegativeFrom: true });
+    }
+    if (pickedUp > 0) {
+      await this.crates.move(tx, { type: CrateMovementType.PICKUP, quantity: pickedUp, from: customer, to: vehicle, referenceType: 'route_stop', referenceId: stop.id, actorId: actor.id });
+    }
+  }
+
+  /**
+   * Al liquidar se cuentan los canastillos del vehículo: vuelven al almacén; si faltan, quedan a cargo del chofer
+   * (hasta que aparezcan o se den de baja); si sobran, se registran como encontrados.
+   */
+  private async reconcileCrates(tx: Tx, route: { id: string; routeNumber: string; driverId: string; originWarehouseId: string }, vehicleWarehouseId: string, counted: number | undefined, actor: AuthUser) {
+    const balance = await tx.crateBalance.findUnique({ where: { holderType_holderId: { holderType: CrateHolderType.WAREHOUSE, holderId: vehicleWarehouseId } } });
+    const expected = balance?.quantity ?? 0;
+    const returned = counted ?? Math.max(expected, 0);
+    const vehicle = { type: CrateHolderType.WAREHOUSE, id: vehicleWarehouseId };
+    const origin = { type: CrateHolderType.WAREHOUSE, id: route.originWarehouseId };
+    const ref = { referenceType: 'route', referenceId: route.id, actorId: actor.id };
+    const back = Math.min(returned, Math.max(expected, 0));
+    if (back > 0) await this.crates.move(tx, { type: CrateMovementType.RETURN, quantity: back, from: vehicle, to: origin, ...ref });
+    if (returned > Math.max(expected, 0)) {
+      // Más de lo esperado: vacíos que el sistema no tenía registrados (clientes de antes del sistema, conteos de la calle).
+      await this.crates.move(tx, { type: CrateMovementType.INITIAL, quantity: returned - Math.max(expected, 0), to: origin, reason: `Sobrante al liquidar la ruta ${route.routeNumber}`, ...ref });
+    }
+    if (expected > returned) {
+      await this.crates.move(tx, {
+        type: CrateMovementType.SHORTAGE,
+        quantity: expected - returned,
+        from: vehicle,
+        to: { type: CrateHolderType.USER, id: route.driverId },
+        reason: `Faltante al liquidar la ruta ${route.routeNumber}`,
+        ...ref,
+      });
+    }
+    // Si el vehículo quedó en negativo (el chofer entregó más de los registrados), se lleva a cero.
+    const after = await tx.crateBalance.findUnique({ where: { holderType_holderId: { holderType: CrateHolderType.WAREHOUSE, holderId: vehicleWarehouseId } } });
+    if (after && after.quantity < 0) {
+      await this.crates.move(tx, { type: CrateMovementType.INITIAL, quantity: -after.quantity, to: vehicle, reason: `Ajuste: se entregaron más canastillos de los cargados en ${route.routeNumber}`, ...ref });
+    }
+    return { expected, returned };
   }
 
   // ── Internos ────────────────────────────────────────────
@@ -583,6 +654,13 @@ export class RoutesService {
         pending: route.stops.filter((s) => s.status === StopStatus.PENDING).length,
         orderedKg,
         estimatedCrates: Math.ceil(orderedKg.toNumber() / KG_PER_CRATE),
+        crates: {
+          loaded: route.cratesLoaded,
+          delivered: route.stops.reduce((t, s) => t + s.cratesDelivered, 0),
+          pickedUp: route.stops.reduce((t, s) => t + s.cratesPickedUp, 0),
+          expectedBack: route.cratesLoaded - route.stops.reduce((t, s) => t + s.cratesDelivered - s.cratesPickedUp, 0),
+          returned: route.cratesReturned,
+        },
         orderedAmount: money(route.stops.reduce((t, s) => t.plus(s.presale.totalAmount), ZERO)),
         soldAmount: money(route.stops.reduce((t, s) => t.plus(s.sale?.totalAmount ?? 0), ZERO)),
         collectedAmount: money(route.stops.reduce((t, s) => t.plus(s.paidAmount), ZERO)),

@@ -179,7 +179,13 @@ export function RouteDetailPage() {
                   </Table>
                 </Table.ScrollContainer>
                 {r.dispatchedAt && (
-                  <Text size="xs" c="dimmed" p="sm">Despachó {r.dispatchedBy?.fullName} el {fmtDateTime(r.dispatchedAt)}</Text>
+                  <>
+                    <Text size="sm" px="sm" pt="sm">
+                      Canastillos: salieron <b>{r.cratesLoaded}</b> · quedaron con clientes <b>{r.summary.crates?.delivered ?? 0}</b> · recogidos <b>{r.summary.crates?.pickedUp ?? 0}</b> ·{' '}
+                      {r.status === 'COMPLETED' ? <>volvieron <b>{r.cratesReturned ?? 0}</b> de {r.summary.crates?.expectedBack ?? 0}</> : <>a bordo <b>{r.summary.crates?.expectedBack ?? 0}</b></>}
+                    </Text>
+                    <Text size="xs" c="dimmed" p="sm">Despachó {r.dispatchedBy?.fullName} el {fmtDateTime(r.dispatchedAt)}</Text>
+                  </>
                 )}
               </Card>
             </Grid.Col>
@@ -227,6 +233,9 @@ export function RouteDetailPage() {
                       <Table.Td>
                         {s.receivedByName && <Text size="sm">{s.receivedByName}</Text>}
                         {s.problemType && <Text size="sm" c="red">{DELIVERY_PROBLEMS[s.problemType]}</Text>}
+                        {(s.cratesDelivered > 0 || s.cratesPickedUp > 0) && (
+                          <Text size="xs" c="dimmed">Canastillos: dejó {s.cratesDelivered} · recogió {s.cratesPickedUp}</Text>
+                        )}
                         {s.notes && <Text size="xs" c="dimmed">{s.notes}</Text>}
                         {s.resolvedAtDevice && <Text size="xs" c="dimmed">{fmtDateTime(s.resolvedAtDevice)}</Text>}
                       </Table.Td>
@@ -269,8 +278,11 @@ function useRouteMutation(fn: () => Promise<unknown>, ok: string, onClose: () =>
 
 function DispatchModal({ route, opened, onClose }: { route: RouteDetail; opened: boolean; onClose: () => void }) {
   const [loads, setLoads] = useState<Record<string, number | ''>>({});
+  const [crates, setCrates] = useState<number | ''>(0);
   useEffect(() => {
-    if (opened) setLoads(Object.fromEntries(route.loadSheet.map((l) => [l.productId, Number(l.orderedKg)])));
+    if (!opened) return;
+    setLoads(Object.fromEntries(route.loadSheet.map((l) => [l.productId, Number(l.orderedKg)])));
+    setCrates(Math.min(route.summary.estimatedCrates, route.vehicle.capacityCrates));
   }, [opened, route]);
   const stock = useQuery({
     queryKey: ['inventory-lots', route.originWarehouse.id],
@@ -282,7 +294,7 @@ function DispatchModal({ route, opened, onClose }: { route: RouteDetail; opened:
   const capacity = Number(route.vehicle.capacityKg);
   const invalid = route.loadSheet.some((l) => Number(loads[l.productId] || 0) < Number(l.orderedKg) || Number(loads[l.productId] || 0) > available(l.productId)) || total > capacity;
   const dispatch = useRouteMutation(
-    () => api.post(`/routes/${route.id}/dispatch`, { loads: Object.entries(loads).map(([productId, w]) => ({ productId, weightKg: Number(w || 0) })) }),
+    () => api.post(`/routes/${route.id}/dispatch`, { cratesLoaded: Number(crates || 0), loads: Object.entries(loads).map(([productId, w]) => ({ productId, weightKg: Number(w || 0) })) }),
     'Ruta despachada: la carga pasó al vehículo y el chofer ya puede entregar',
     onClose,
   );
@@ -321,7 +333,10 @@ function DispatchModal({ route, opened, onClose }: { route: RouteDetail; opened:
           </Table.Tbody>
         </Table>
         <Text size="sm" c={total > capacity ? 'red' : undefined}>Total {fmtKg(total.toFixed(3))} de {fmtKg(route.vehicle.capacityKg)}</Text>
-        <Button disabled={invalid} loading={dispatch.isPending} onClick={() => dispatch.mutate()}>Cargar y despachar</Button>
+        <NumberInput label="Canastillos que salen" w={220} min={0} max={route.vehicle.capacityCrates} allowDecimal={false} value={crates}
+          onChange={(v) => setCrates(v as number | '')} description={`Estimado ${route.summary.estimatedCrates} · capacidad ${route.vehicle.capacityCrates}`}
+          error={Number(crates) > route.vehicle.capacityCrates ? 'Supera la capacidad' : undefined} />
+        <Button disabled={invalid || Number(crates) > route.vehicle.capacityCrates} loading={dispatch.isPending} onClick={() => dispatch.mutate()}>Cargar y despachar</Button>
       </Stack>
     </Modal>
   );
@@ -330,6 +345,11 @@ function DispatchModal({ route, opened, onClose }: { route: RouteDetail; opened:
 function CloseModal({ route, opened, onClose }: { route: RouteDetail; opened: boolean; onClose: () => void }) {
   const [returns, setReturns] = useState<Record<string, number | ''>>({});
   const [notes, setNotes] = useState('');
+  const expectedCrates = route.summary.crates?.expectedBack ?? 0;
+  const [crates, setCrates] = useState<number | ''>(expectedCrates);
+  useEffect(() => {
+    if (opened) setCrates(Math.max(0, expectedCrates));
+  }, [opened, expectedCrates]);
   const onBoard = useQuery({
     queryKey: ['inventory-lots', route.vehicle.warehouseId],
     queryFn: async () => (await api.get<LotBalance[]>('/inventory/lots', { params: { warehouseId: route.vehicle.warehouseId } })).data,
@@ -341,7 +361,7 @@ function CloseModal({ route, opened, onClose }: { route: RouteDetail; opened: bo
   }, [opened, onBoard.data]);
   const pending = route.stops.filter((s) => s.status === 'PENDING');
   const close = useRouteMutation(
-    () => api.post(`/routes/${route.id}/close`, { notes: notes || undefined, returns: Object.entries(returns).map(([lotId, w]) => ({ lotId, receivedWeightKg: Number(w || 0) })) }),
+    () => api.post(`/routes/${route.id}/close`, { notes: notes || undefined, cratesReturned: Number(crates || 0), returns: Object.entries(returns).map(([lotId, w]) => ({ lotId, receivedWeightKg: Number(w || 0) })) }),
     'Ruta liquidada: el sobrante volvió al almacén',
     onClose,
   );
@@ -384,6 +404,9 @@ function CloseModal({ route, opened, onClose }: { route: RouteDetail; opened: bo
             </Table>
           )}
         </QueryState>
+        <NumberInput label="Canastillos que volvieron" w={240} min={0} allowDecimal={false} value={crates} onChange={(v) => setCrates(v as number | '')}
+          description={`Deberían volver ${expectedCrates}: salieron ${route.cratesLoaded}, quedaron ${route.summary.crates?.delivered ?? 0} con clientes y se recogieron ${route.summary.crates?.pickedUp ?? 0}`}
+          error={Number(crates) < expectedCrates ? `Faltan ${expectedCrates - Number(crates)}: quedarán a cargo de ${route.driver.fullName}` : undefined} />
         <Textarea label="Observaciones" autosize minRows={1} value={notes} onChange={(e) => setNotes(e.currentTarget.value)} />
         <Button loading={close.isPending} disabled={onBoard.isLoading || (onBoard.data ?? []).some((l) => returns[l.lotId] === '' || Number(returns[l.lotId]) > Number(l.weightKg))}
           onClick={() => close.mutate()}>
@@ -484,6 +507,8 @@ function RegisterModal({ stop: s, onClose }: { stop: RouteStop | null; onClose: 
   const [paid, setPaid] = useState<number | ''>(0);
   const [method, setMethod] = useState<string | null>('EFECTIVO');
   const [receiver, setReceiver] = useState('');
+  const [cratesOut, setCratesOut] = useState<number | ''>(0);
+  const [cratesIn, setCratesIn] = useState<number | ''>(0);
   const [problem, setProblem] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   useEffect(() => {
@@ -493,6 +518,8 @@ function RegisterModal({ stop: s, onClose }: { stop: RouteStop | null; onClose: 
     setReasons({});
     setPaid(0);
     setReceiver('');
+    setCratesOut(0);
+    setCratesIn(0);
     setProblem(null);
     setNotes('');
   }, [s]);
@@ -503,6 +530,8 @@ function RegisterModal({ stop: s, onClose }: { stop: RouteStop | null; onClose: 
         paidAmount: Number(paid || 0),
         paymentMethod: Number(paid || 0) > 0 ? method : undefined,
         receivedByName: receiver,
+        cratesDelivered: Number(cratesOut || 0),
+        cratesPickedUp: Number(cratesIn || 0),
         notes: notes || undefined,
       }),
     'Entrega registrada',
@@ -536,6 +565,10 @@ function RegisterModal({ stop: s, onClose }: { stop: RouteStop | null; onClose: 
               <Group grow>
                 <NumberInput label="Cobrado (Bs)" min={0} decimalScale={2} value={paid} onChange={(v) => setPaid(v as number | '')} />
                 <Select label="Método" disabled={!Number(paid)} value={method} onChange={setMethod} data={Object.entries(PAYMENT_LABELS).map(([value, label]) => ({ value, label }))} />
+              </Group>
+              <Group grow>
+                <NumberInput label="Canastillos que deja" min={0} allowDecimal={false} value={cratesOut} onChange={(v) => setCratesOut(v as number | '')} />
+                <NumberInput label="Canastillos que recoge" min={0} allowDecimal={false} value={cratesIn} onChange={(v) => setCratesIn(v as number | '')} />
               </Group>
               <TextInput label="Recibió" withAsterisk value={receiver} onChange={(e) => setReceiver(e.currentTarget.value)} />
               <Textarea label="Observaciones" autosize minRows={1} value={notes} onChange={(e) => setNotes(e.currentTarget.value)} />

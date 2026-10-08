@@ -11,6 +11,8 @@ import 'package:erp_preventa/core/location_service.dart';
 import 'package:erp_preventa/core/models.dart';
 import 'package:erp_preventa/core/workspace.dart';
 import 'package:erp_preventa/screens/customer_detail_screen.dart';
+import 'package:erp_preventa/screens/collector/collect_screen.dart';
+import 'package:erp_preventa/screens/collector/collector_home_screen.dart';
 import 'package:erp_preventa/screens/customer_form_screen.dart';
 import 'package:erp_preventa/screens/driver/delivery_form_screen.dart';
 import 'package:erp_preventa/screens/driver/driver_home_screen.dart';
@@ -124,6 +126,34 @@ Future<AppState> _seedDriver() async {
   return s;
 }
 
+/// Cobrador: clientes con deuda y canastillos, un cobro enviado y uno sin señal.
+Future<AppState> _seedCollector() async {
+  final s = await _seed();
+  final db = s.db;
+  final now = DateTime.now();
+  await db.replaceCatalog(
+    products: await db.products(),
+    customers: [
+      Customer(id: 'c1', code: 'CLI-00001', name: 'Pollería Doña Juana', customerTypeId: 't1', creditEnabled: true, currentDebt: 1840.5, cratesHeld: 4,
+          debtSince: now.subtract(const Duration(days: 23)), phone: '70812345',
+          addresses: [Address(id: 'a1', label: 'Puesto', address: 'Mercado Central #12', latitude: -17.78, longitude: -63.18, isPrimary: true)]),
+      Customer(id: 'c2', code: 'CLI-00002', name: 'Tienda Don Pedro', customerTypeId: 't1', creditEnabled: true, currentDebt: 312.8, debtSince: now.subtract(const Duration(days: 4)),
+          addresses: [Address(id: 'a2', label: 'Tienda', address: 'Av. Banzer 4to anillo', isPrimary: true)]),
+      Customer(id: 'c3', code: 'CLI-00003', name: 'Restaurante El Fogón', customerTypeId: 't1', cratesHeld: 2,
+          addresses: [Address(id: 'a3', label: 'Local', address: 'Av. Monseñor Rivero #245', isPrimary: true)]),
+      Customer(id: 'c4', code: 'CLI-00004', name: 'Minimarket La Esquina', customerTypeId: 't1', creditEnabled: true, currentDebt: 960, debtSince: now.subtract(const Duration(days: 11))),
+    ],
+    customerTypes: await db.customerTypes(),
+  );
+  await db.saveCollection(Collection(id: 'k1', customerId: 'c2', customerName: 'Tienda Don Pedro', amount: 200, paymentMethod: 'EFECTIVO',
+      collectedAt: DateTime(now.year, now.month, now.day, 9, 40), receiptNumber: 'R-000041', paidByName: 'Pedro Rojas', cratesPickedUp: 2));
+  await db.saveCollection(Collection(id: 'k2', customerId: 'c4', customerName: 'Minimarket La Esquina', amount: 150, paymentMethod: 'QR',
+      collectedAt: DateTime(now.year, now.month, now.day, 10, 15), syncState: SyncState.pending));
+  s.user = SessionUser(id: 'u3', username: 'cobrador', fullName: 'Cobrador Demo', roleName: 'Cobrador', permissions: ['collections.create', 'sync.push']);
+  await s.reload();
+  return s;
+}
+
 Widget _app(AppState s, Widget home) => ChangeNotifierProvider.value(
       value: s,
       child: MaterialApp(
@@ -140,12 +170,12 @@ void main() {
     await _loadFonts();
   });
 
-  Future<void> shot(WidgetTester tester, String name, Widget Function(AppState) build, {Future<void> Function(WidgetTester)? act, bool driver = false}) async {
+  Future<void> shot(WidgetTester tester, String name, Widget Function(AppState) build, {Future<void> Function(WidgetTester)? act, bool driver = false, bool collector = false}) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     late AppState s;
-    await tester.runAsync(() async => s = driver ? await _seedDriver() : await _seed());
+    await tester.runAsync(() async => s = driver ? await _seedDriver() : collector ? await _seedCollector() : await _seed());
     await tester.pumpWidget(_app(s, build(s)));
     await tester.pumpAndSettle();
     if (act != null) await act(tester);
@@ -196,6 +226,19 @@ void main() {
           await g.moveTo(pad + Offset(30.0 + i * 11, 110.0 - 40.0 * (i.isEven ? 1.0 : 0.2) + i));
         }
         await g.up();
+        await t.pumpAndSettle();
+      }));
+
+  // Cobrador
+  testWidgets('cobrador: por cobrar', (t) => shot(t, 'cobrador_pendientes', (_) => const CollectorHomeScreen(), collector: true));
+  testWidgets('cobrador: mis cobros', (t) => shot(t, 'cobrador_cobros', (_) => const CollectorHomeScreen(), collector: true, act: (t) async {
+        await t.tap(find.text('Mis cobros').last);
+        await t.pumpAndSettle();
+      }));
+  testWidgets('cobrador: cobrar', (t) => shot(t, 'cobrador_cobrar', (_) => const CollectScreen(customerId: 'c1'), collector: true, act: (t) async {
+        await t.enterText(find.widgetWithText(TextField, 'Monto cobrado'), '500');
+        await t.tap(find.byTooltip('Más'));
+        await t.tap(find.byTooltip('Más'));
         await t.pumpAndSettle();
       }));
 }

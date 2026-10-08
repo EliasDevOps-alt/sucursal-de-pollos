@@ -185,6 +185,23 @@ enum StopStatus {
   FAILED // no entregado (con motivo)
 }
 
+enum CrateHolderType {
+  WAREHOUSE // almacén central, sucursal o vehículo
+  CUSTOMER
+  USER // responsable: chofer o cobrador
+}
+
+enum CrateMovementType {
+  INITIAL // alta de canastillos (compra o inventario inicial)
+  DISPATCH // almacén → vehículo al despachar
+  DELIVERY // vehículo → cliente
+  PICKUP // cliente → vehículo o cobrador
+  RETURN // vehículo o responsable → almacén
+  SHORTAGE // faltante al liquidar: queda a cargo del chofer
+  TRANSFER // movimiento manual entre tenedores
+  WRITE_OFF // baja: roto o perdido (con sanción opcional)
+}
+
 enum DeliveryProblem {
   CLOSED // local cerrado
   NOT_FOUND // no se encontró al cliente o al responsable
@@ -286,6 +303,7 @@ model User {
   routesCancelled      DeliveryRoute[]       @relation("RouteCancelledBy")
   stopsRecorded        RouteStop[]           @relation("StopRecordedBy")
   stopCreditApprovals  RouteStop[]           @relation("StopCreditAuthorizedBy")
+  crateMovements       CrateMovement[]
 
   @@map("users")
 }
@@ -853,23 +871,30 @@ model PresaleItem {
 
 // Un pago tiene un solo método; un pago combinado se registra como varios pagos.
 model Payment {
-  id              String              @id @default(uuid()) @db.Uuid
-  customerId      String?             @map("customer_id") @db.Uuid
-  saleId          String?             @map("sale_id") @db.Uuid
-  amount          Decimal             @db.Decimal(14, 2)
-  paymentMethod   String              @map("payment_method")
-  paymentSource   String              @default("CENTRAL") @map("payment_source") // CENTRAL/BRANCH/DRIVER/COLLECTOR
-  receivedById    String              @map("received_by_id") @db.Uuid
-  paymentDate     DateTime            @default(now()) @map("payment_date")
-  referenceNumber String?             @map("reference_number")
-  notes           String?
+  id                String              @id @default(uuid()) @db.Uuid
+  customerId        String?             @map("customer_id") @db.Uuid
+  saleId            String?             @map("sale_id") @db.Uuid
+  amount            Decimal             @db.Decimal(14, 2)
+  paymentMethod     String              @map("payment_method")
+  paymentSource     String              @default("CENTRAL") @map("payment_source") // CENTRAL/BRANCH/DRIVER/COLLECTOR
+  receivedById      String              @map("received_by_id") @db.Uuid
+  paymentDate       DateTime            @default(now()) @map("payment_date")
+  referenceNumber   String?             @map("reference_number")
+  notes             String?
   // Cobros de deuda (sin venta asociada): número de recibo visible y anulación con motivo.
-  receiptNumber   String?             @unique @map("receipt_number")
-  isAdvance       Boolean             @default(false) @map("is_advance") // dejó saldo a favor
-  status          PaymentRecordStatus @default(VALID)
-  annulledAt      DateTime?           @map("annulled_at")
-  annulledById    String?             @map("annulled_by_id") @db.Uuid
-  annulReason     String?             @map("annul_reason")
+  receiptNumber     String?             @unique @map("receipt_number")
+  isAdvance         Boolean             @default(false) @map("is_advance") // dejó saldo a favor
+  status            PaymentRecordStatus @default(VALID)
+  annulledAt        DateTime?           @map("annulled_at")
+  annulledById      String?             @map("annulled_by_id") @db.Uuid
+  annulReason       String?             @map("annul_reason")
+  // Cobro en la calle (app del cobrador): quién entregó el dinero, su firma, dónde y cuándo según el teléfono.
+  paidByName        String?             @map("paid_by_name")
+  signature         String?
+  latitude          Decimal?            @db.Decimal(10, 7)
+  longitude         Decimal?            @db.Decimal(10, 7)
+  collectedAtDevice DateTime?           @map("collected_at_device")
+  deviceOperationId String?             @unique @map("device_operation_id") @db.Uuid
 
   customer   Customer? @relation(fields: [customerId], references: [id])
   sale       Sale?     @relation(fields: [saleId], references: [id])
@@ -1160,6 +1185,8 @@ model DeliveryRoute {
   closedById        String?     @map("closed_by_id") @db.Uuid
   closedAt          DateTime?   @map("closed_at")
   closeNotes        String?     @map("close_notes")
+  cratesLoaded      Int         @default(0) @map("crates_loaded") // canastillos que salen en el vehículo
+  cratesReturned    Int?        @map("crates_returned") // contados al liquidar
   cancelledById     String?     @map("cancelled_by_id") @db.Uuid
   cancelledAt       DateTime?   @map("cancelled_at")
   cancelReason      String?     @map("cancel_reason")
@@ -1197,6 +1224,8 @@ model RouteStop {
   paidAmount           Decimal          @default(0) @map("paid_amount") @db.Decimal(14, 2)
   paymentMethod        String?          @map("payment_method")
   problemType          DeliveryProblem? @map("problem_type")
+  cratesDelivered      Int              @default(0) @map("crates_delivered") // canastillos que quedan con el cliente
+  cratesPickedUp       Int              @default(0) @map("crates_picked_up") // vacíos que el cliente devuelve
   notes                String?
   latitude             Decimal?         @db.Decimal(10, 7)
   longitude            Decimal?         @db.Decimal(10, 7)
@@ -1232,4 +1261,44 @@ model RouteStopItem {
   product Product   @relation(fields: [productId], references: [id])
 
   @@map("route_stop_items")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Canastillos: control por cantidad y por responsable
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Saldo de canastillos de cada tenedor; siempre igual a la suma de sus movimientos.
+ */
+model CrateBalance {
+  holderType CrateHolderType @map("holder_type")
+  holderId   String          @map("holder_id") @db.Uuid
+  quantity   Int             @default(0)
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  @@id([holderType, holderId])
+  @@map("crate_balances")
+}
+
+model CrateMovement {
+  id            String            @id @default(uuid()) @db.Uuid
+  type          CrateMovementType
+  quantity      Int
+  fromType      CrateHolderType?  @map("from_type")
+  fromId        String?           @map("from_id") @db.Uuid
+  toType        CrateHolderType?  @map("to_type")
+  toId          String?           @map("to_id") @db.Uuid
+  referenceType String?           @map("reference_type")
+  referenceId   String?           @map("reference_id") @db.Uuid
+  reason        String?
+  chargeAmount  Decimal?          @map("charge_amount") @db.Decimal(14, 2) // sanción cobrada al cliente
+  createdById   String            @map("created_by_id") @db.Uuid
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  @@index([fromType, fromId])
+  @@index([toType, toId])
+  @@index([createdAt])
+  @@map("crate_movements")
 }

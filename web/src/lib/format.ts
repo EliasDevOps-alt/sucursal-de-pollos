@@ -136,3 +136,21 @@ export const DELIVERY_PROBLEMS: Record<string, string> = {
   NOT_VISITED: 'No se visitó',
   OTHER: 'Otro',
 };
+
+export const CRATE_MOVEMENT_LABELS: Record<string, string> = {
+  INITIAL: 'Alta',
+  DISPATCH: 'Carga al vehículo',
+  DELIVERY: 'Entrega al cliente',
+  PICKUP: 'Recojo del cliente',
+  RETURN: 'Devolución al almacén',
+  SHORTAGE: 'Faltante a cargo',
+  TRANSFER: 'Traspaso',
+  WRITE_OFF: 'Baja',
+};
+
+export const PAYMENT_SOURCE_LABELS: Record<string, string> = {
+  CENTRAL: 'Central',
+  BRANCH: 'Sucursal',
+  DRIVER: 'Chofer',
+  COLLECTOR: 'Cobrador',
+};

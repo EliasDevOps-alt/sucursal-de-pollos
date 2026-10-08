@@ -12,6 +12,8 @@ export const OPERATION_TYPES = [
   'GPS_POSITION',
   'DELIVERY_COMPLETE',
   'DELIVERY_FAIL',
+  'COLLECTION_CREATE',
+  'CRATE_PICKUP',
 ] as const;
 export type OperationType = (typeof OPERATION_TYPES)[number];
 

@@ -17,7 +17,7 @@ import '../core/workspace.dart';
 /// Sin ese parámetro apunta al emulador de Android (que ve la PC como 10.0.2.2).
 /// En la pantalla de ingreso, "Servidor" permite cambiarla.
 const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3000/api');
-const appVersion = '0.2.0';
+const appVersion = '0.3.0';
 
 class AppState extends ChangeNotifier {
   AppState({required this.db, LocationService? location}) : location = location ?? LocationService();
@@ -38,6 +38,7 @@ class AppState extends ChangeNotifier {
   List<Presale> presales = [];
   List<OutboxOp> outbox = [];
   List<DeliveryRoute> routes = [];
+  List<Collection> collections = [];
 
   bool online = true;
   bool syncing = false;
@@ -52,6 +53,7 @@ class AppState extends ChangeNotifier {
   int get rejectedCount => outbox.where((o) => o.state != 'pending').length;
   bool get loggedIn => user != null;
   bool get isDriver => user?.isDriver ?? false;
+  bool get isCollector => user?.isCollector ?? false;
   /// Ruta en curso del chofer (la que se está repartiendo).
   DeliveryRoute? get activeRoute => routes.where((r) => r.inProgress).firstOrNull;
 
@@ -82,6 +84,7 @@ class AppState extends ChangeNotifier {
     presales = await db.presales();
     outbox = await db.outbox();
     routes = await db.routes();
+    collections = await db.collections();
     notifyListeners();
   }
 
@@ -91,8 +94,8 @@ class AppState extends ChangeNotifier {
     api = ApiClient(baseUrl: apiUrl);
     final res = await api.login(username.trim(), password);
     final u = SessionUser.fromJson(Map<String, dynamic>.from(res['user'] as Map));
-    if (!u.permissions.contains('presales.create') && !u.permissions.contains('deliveries.register')) {
-      throw ApiException(403, 'Este usuario no es preventista ni chofer');
+    if (!u.permissions.contains('presales.create') && !u.permissions.contains('deliveries.register') && !u.permissions.contains('collections.create')) {
+      throw ApiException(403, 'Este usuario no es preventista, chofer ni cobrador');
     }
     // Otro usuario en el mismo teléfono: se limpia lo anterior solo si no quedó nada sin enviar.
     final previous = await db.getValue('user');
@@ -245,9 +248,19 @@ class AppState extends ChangeNotifier {
     String? signaturePng,
     String? notes,
     GeoPoint? location,
+    int cratesDelivered = 0,
+    int cratesPickedUp = 0,
   }) async {
     final r = await workspace.deliverStop(stop,
-        items: items, paidAmount: paidAmount, paymentMethod: paymentMethod, receivedByName: receivedByName, signaturePng: signaturePng, notes: notes, location: location);
+        items: items,
+        paidAmount: paidAmount,
+        paymentMethod: paymentMethod,
+        receivedByName: receivedByName,
+        signaturePng: signaturePng,
+        notes: notes,
+        location: location,
+        cratesDelivered: cratesDelivered,
+        cratesPickedUp: cratesPickedUp);
     await reload();
     unawaited(sync());
     return r;
@@ -258,6 +271,37 @@ class AppState extends ChangeNotifier {
     await reload();
     unawaited(sync());
     return r;
+  }
+
+  Future<Collection> collect(
+    Customer customer, {
+    required double amount,
+    required String paymentMethod,
+    String? referenceNumber,
+    String? paidByName,
+    String? signaturePng,
+    String? notes,
+    int cratesPickedUp = 0,
+    GeoPoint? location,
+  }) async {
+    final c = await workspace.collect(customer,
+        amount: amount,
+        paymentMethod: paymentMethod,
+        referenceNumber: referenceNumber,
+        paidByName: paidByName,
+        signaturePng: signaturePng,
+        notes: notes,
+        cratesPickedUp: cratesPickedUp,
+        location: location);
+    await reload();
+    unawaited(sync());
+    return c;
+  }
+
+  Future<void> pickupCrates(Customer customer, int quantity, {String? notes, GeoPoint? location}) async {
+    await workspace.pickupCrates(customer, quantity, notes: notes, location: location);
+    await reload();
+    unawaited(sync());
   }
 
   Future<void> discard(OutboxOp op) async {

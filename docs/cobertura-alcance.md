@@ -13,8 +13,8 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 | 6.3 Ventas | 🟡 9 de 11 | Faltan recibos imprimibles, venta por canastillo e impresión térmica |
 | 6.4 Preventas | ✅ 8 de 8 | Incluye edición de pedidos, direcciones adicionales, visitas y mapa de recorrido |
 | 6.5 Logística y distribución | 🟡 10 de 12 | Vehículos, rutas, hoja de carga, entregas offline con firma y GPS sí; faltan impresión térmica y reimpresión del recibo (fase L) |
-| 6.6 Cobranza y crédito | 🟡 6 de 10 | Cobros y anticipos en la web sí; faltan la app del cobrador, mapa, recibos y rendición |
-| 6.7 Canastillos | ❌ 0 de 7 | Módulo completo pendiente |
+| 6.6 Cobranza y crédito | 🟡 9 de 10 | Cobros en oficina y en la calle (app del cobrador offline), mapa, recibo con firma y canastillos; falta la rendición del dinero (fase K) |
+| 6.7 Canastillos | ✅ 7 de 7 | Saldos por tenedor, entregas y recojos en rutas y cobros, faltantes a cargo, bajas con sanción y trazabilidad |
 | 6.8 Finanzas operativas | 🟡 1 de 11 | Solo rentabilidad; falta caja, ingresos/egresos, rendiciones y cierres |
 | 6.9 Dashboard y reportes | 🟡 | Hechos los de ventas, stock, merma, rentabilidad y cuentas por cobrar; faltan dinero, logística, canastillos y sucursales |
 | §8 Apps móviles | 🟡 1 de 3 | Hecha la del preventista; faltan chofer y cobrador |
@@ -84,13 +84,15 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Cobros parciales o totales de la deuda, con recibo numerado, anticipos y anulación (web)
 - ✅ Un solo método de pago por operación
 - ✅ Actualización automática del saldo
-- ❌ Mapa de clientes pendientes
-- ❌ Firma y recibo de cobranza
-- ❌ Control de canastillos recogidos
-- ❌ Rendición del dinero; app del cobrador (offline)
+- ✅ Mapa de clientes pendientes (deuda por antigüedad y canastillos por recoger) en la web; en la app, lista por monto o por días con navegación
+- ✅ Firma y recibo de cobranza: número de recibo del servidor, quién pagó, firma, lugar y hora del teléfono (impresión en la fase L)
+- ✅ Control de canastillos recogidos por el cobrador y el chofer
+- ✅ App del cobrador offline; ❌ rendición del dinero (fase K: caja)
 
-### 6.7 Canastillos — pendiente completo
-- ❌ Control por cantidad y responsable (central, sucursal, cliente, chofer); entregados, devueltos y pendientes; bajas con motivo; sanciones; trazabilidad
+### 6.7 Canastillos
+- ✅ Control por cantidad y por tenedor: almacén central, sucursal, vehículo, cliente y responsable (chofer o cobrador)
+- ✅ Entregados con el pedido, devueltos vacíos y pendientes por cliente; al liquidar la ruta, el faltante queda a cargo del chofer
+- ✅ Bajas con motivo y sanción opcional al cliente (se suma a su deuda); trazabilidad de cada movimiento con quién lo registró
 
 ### 6.8 Finanzas operativas
 - ❌ Dinero inicial, ingresos y egresos, compras como egresos, ventas y cobranzas como ingresos
@@ -99,7 +101,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 
 ### 6.9 Dashboard y reportes
 - ✅ Dashboard general; ventas, stock y cuentas por cobrar
-- 🟡 Rutas activas, entregas y problemas de entrega en Logística (no en el tablero); ❌ dinero (caja), canastillos pendientes y diferencias de caja
+- 🟡 Rutas activas, entregas y problemas de entrega en Logística (no en el tablero); ❌ dinero (caja) y diferencias de caja; canastillos pendientes en su propia página
 - ✅ Lotes próximos a vencer y alertas de bajo stock
 - ✅ Reportes de ventas, inventario, merma, rentabilidad (por producto, lote, cliente y vendedor) y cobranza (antigüedad)
 - 🟡 Compras y clientes: listados, sin reporte dedicado
@@ -112,17 +114,17 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ 7.2 Precios: por lote, central vs. sucursal (por API), permiso de modificación, precio original y final auditados. 🟡 La pantalla de precios solo edita el precio central
 - 🟡 7.3 Clientes: rangos, descuentos, límites, aprobación de cambio de rango, excepciones, tipos de cliente y cobros sí; sugerencia automática de ascenso no
 - ✅ 7.4 Entregas y rutas: ruta fija al despachar, diferencias y problemas con motivo obligatorio, firma, cobro registrado por el chofer, excesos de crédito marcados para revisión
-- ❌ 7.5 Canastillos
+- ✅ 7.5 Canastillos: por cantidad y responsable, bajas con motivo, sanciones
 - ✅ 7.6 Anulaciones (sin borrado, con usuario, fecha y motivo) y devoluciones autorizadas
 
 ### 8–10. Roles, seguridad y offline
 - ✅ Administrador, Vendedor Central y Preventista operativos
 - ✅ Vendedor Sucursal (recibe transferencias y vende); 🟡 Contador (reportes sí, caja no)
-- ✅ Chofer (app de entregas); ❌ Cobrador (rol creado, sin app)
+- ✅ Chofer (app de entregas) y Cobrador (app de cobranza)
 - ✅ Permisos por acción y autorización de supervisor con credenciales
 - ✅ Pantallas para administrar usuarios, roles y permisos
 - ✅ Auditoría de todo lo crítico, con visor y filtros
-- ✅ Offline de preventas y entregas; ❌ offline de cobranzas
+- ✅ Offline de preventas, entregas y cobranzas
 - ✅ Conflictos: quedan en REVIEW con su motivo, el teléfono los muestra y Administración los resuelve en la web
 
 ### 11. Recibos e impresión — pendiente completo
@@ -130,9 +132,9 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 
 ## Base de datos (documento de diseño)
 
-Implementadas 44 tablas de las ~60 del documento: seguridad y auditoría, organización con vehículos, productos y precios por lote, compras/recepción/lotes, inventario (movimientos, saldos, transferencias y ajustes), clientes y direcciones, ventas con asignación por lote y devoluciones, preventas y visitas, pagos y movimientos de deuda, rutas de entrega con paradas y productos entregados, dispositivos, sincronización y GPS.
+Implementadas 46 tablas de las ~60 del documento: seguridad y auditoría, organización con vehículos, productos y precios por lote, compras/recepción/lotes, inventario (movimientos, saldos, transferencias y ajustes), clientes y direcciones, ventas con asignación por lote y devoluciones, preventas y visitas, pagos y movimientos de deuda, rutas de entrega con paradas y productos entregados, canastillos (saldos y movimientos), dispositivos, sincronización y GPS.
 
-Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la recepción), `customer_rank_history` (hoy en auditoría), `receivable_accounts` (integrada en `customers`), `sale_payments` (integrada en `payments`), recibos imprimibles, canastillos, caja, rendiciones y cierres.
+Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la recepción), `customer_rank_history` (hoy en auditoría), `receivable_accounts` (integrada en `customers`), `sale_payments` (integrada en `payments`), recibos imprimibles, caja, rendiciones y cierres.
 
 ## Plan para completar el MVP
 
@@ -141,7 +143,7 @@ Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la r
 | G. Brechas del núcleo ✅ | **Cobros de deuda** (web), pantallas de usuarios/roles, categorías y tipos de cliente, visor de auditoría, revisión de conflictos de sincronización, modificar preventa, direcciones adicionales y visitas en la app, rango de fechas libre | 1–1,5 semanas |
 | H. Inventario operativo ✅ | Transferencias central–sucursal (con peso recibido), ajustes con motivo, bajas y pérdidas, devoluciones autorizadas | 1–1,5 semanas |
 | I. Logística + app del chofer ✅ | Vehículos, rutas manuales (bloqueadas al iniciar), hoja de despacho, entregas offline con diferencias y problemas, firma digital, seguimiento GPS | 2,5–3 semanas |
-| J. Cobranza + app del cobrador + canastillos | Cobros offline, mapa de pendientes, recibo y firma, canastillos por cantidad y responsable, bajas y sanciones | 2–2,5 semanas |
+| J. Cobranza + app del cobrador + canastillos ✅ | Cobros offline, mapa de pendientes, recibo y firma, canastillos por cantidad y responsable, bajas y sanciones | 2–2,5 semanas |
 | K. Finanzas operativas | Cuentas de caja, movimientos automáticos (ventas, cobros, compras), egresos, rendiciones, cierres con diferencias | 1,5 semanas |
 | L. Recibos e impresión | Recibos PDF de venta, entrega y cobranza; impresión térmica 80 mm (web y Bluetooth desde la app); reimpresión | 1 semana |
 | M. Cierre | Reportes y dashboard faltantes, filtros completos, pruebas, puesta en producción y capacitación | 1–1,5 semanas |

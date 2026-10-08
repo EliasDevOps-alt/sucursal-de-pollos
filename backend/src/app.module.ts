@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CollectionsModule } from './collections/collections.module';
 import { CommonModule } from './common/common.module';
+import { CratesModule } from './crates/crates.module';
 import { CustomersModule } from './customers/customers.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
@@ -30,6 +31,7 @@ import { UsersModule } from './users/users.module';
     CommonModule,
     AuditModule,
     InventoryModule,
+    CratesModule,
     AuthModule,
     UsersModule,
     CatalogModule,

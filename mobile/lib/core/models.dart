@@ -78,6 +78,8 @@ class Customer {
     this.currentDebt = 0,
     this.addresses = const [],
     this.pendingSync = false,
+    this.cratesHeld = 0,
+    this.debtSince,
   });
 
   final String id;
@@ -93,6 +95,11 @@ class Customer {
   final double currentDebt;
   final List<Address> addresses;
   final bool pendingSync;
+  final int cratesHeld; // canastillos del negocio en poder del cliente
+  final DateTime? debtSince; // cargo más antiguo sin saldar
+
+  /// Días que lleva la deuda (para priorizar la cobranza).
+  int? get debtDays => currentDebt > 0 && debtSince != null ? DateTime.now().difference(debtSince!).inDays : null;
 
   Address? get primaryAddress => addresses.isEmpty ? null : addresses.firstWhere((a) => a.isPrimary, orElse: () => addresses.first);
 
@@ -110,6 +117,8 @@ class Customer {
         currentDebt: toDouble(j['currentDebt']),
         addresses: ((j['addresses'] as List?) ?? []).map((a) => Address.fromJson(Map<String, dynamic>.from(a as Map))).toList(),
         pendingSync: j['pendingSync'] == true,
+        cratesHeld: (j['cratesHeld'] as num?)?.toInt() ?? 0,
+        debtSince: j['debtSince'] == null ? null : DateTime.parse(j['debtSince'] as String),
       );
 
   Map<String, dynamic> toJson() => {
@@ -126,6 +135,8 @@ class Customer {
         'currentDebt': currentDebt,
         'addresses': addresses.map((a) => a.toJson()).toList(),
         'pendingSync': pendingSync,
+        'cratesHeld': cratesHeld,
+        'debtSince': debtSince?.toUtc().toIso8601String(),
       };
 
   Customer withAddress(Address a) => Customer(
@@ -142,9 +153,11 @@ class Customer {
         currentDebt: currentDebt,
         addresses: [...addresses, a],
         pendingSync: pendingSync,
+        cratesHeld: cratesHeld,
+        debtSince: debtSince,
       );
 
-  Customer copyWith({String? code, bool? pendingSync}) => Customer(
+  Customer copyWith({String? code, bool? pendingSync, double? currentDebt, int? cratesHeld}) => Customer(
         id: id,
         code: code ?? this.code,
         name: name,
@@ -155,9 +168,11 @@ class Customer {
         discountPercentage: discountPercentage,
         creditEnabled: creditEnabled,
         creditAvailable: creditAvailable,
-        currentDebt: currentDebt,
+        currentDebt: currentDebt ?? this.currentDebt,
         addresses: addresses,
         pendingSync: pendingSync ?? this.pendingSync,
+        cratesHeld: cratesHeld ?? this.cratesHeld,
+        debtSince: debtSince,
       );
 }
 
@@ -329,6 +344,8 @@ class OutboxOp {
         'GPS_POSITION' => 'Posición GPS',
         'DELIVERY_COMPLETE' => 'Entrega registrada',
         'DELIVERY_FAIL' => 'Entrega no realizada',
+        'COLLECTION_CREATE' => 'Cobro de ${payload['amount']} Bs',
+        'CRATE_PICKUP' => 'Canastillos recogidos: ${payload['quantity']}',
         _ => type,
       };
 }
@@ -344,6 +361,9 @@ class SessionUser {
 
   /// Chofer: registra entregas de sus rutas (la app muestra el modo de entregas en lugar del de preventa).
   bool get isDriver => permissions.contains('deliveries.register') && !permissions.contains('presales.create');
+
+  /// Cobrador: cobra deudas en la calle (la app muestra el modo de cobranza).
+  bool get isCollector => permissions.contains('collections.create') && !permissions.contains('presales.create') && !permissions.contains('deliveries.register');
 
   factory SessionUser.fromJson(Map<String, dynamic> j) => SessionUser(
         id: j['id'] as String,
@@ -409,6 +429,8 @@ class RouteStop {
     this.signed = false,
     this.syncState = SyncState.synced,
     this.error,
+    this.cratesDelivered = 0,
+    this.cratesPickedUp = 0,
   });
 
   final String id;
@@ -431,6 +453,8 @@ class RouteStop {
   final bool signed;
   final SyncState syncState;
   final String? error;
+  final int cratesDelivered;
+  final int cratesPickedUp;
 
   bool get isPending => status == 'PENDING';
   double get orderedKg => items.fold(0, (t, i) => t + i.orderedKg);
@@ -470,6 +494,8 @@ class RouteStop {
       notes: j['notes'] as String?,
       saleNumber: j['sale'] == null ? null : (j['sale'] as Map)['saleNumber'] as String?,
       signed: j['signed'] == true,
+      cratesDelivered: (j['cratesDelivered'] as num?)?.toInt() ?? 0,
+      cratesPickedUp: (j['cratesPickedUp'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -494,11 +520,15 @@ class RouteStop {
         signed: j['signed'] == true,
         syncState: SyncState.values.byName((j['syncState'] ?? 'synced') as String),
         error: j['error'] as String?,
+        cratesDelivered: (j['cratesDelivered'] as num?)?.toInt() ?? 0,
+        cratesPickedUp: (j['cratesPickedUp'] as num?)?.toInt() ?? 0,
       );
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'sequence': sequence,
+        'cratesDelivered': cratesDelivered,
+        'cratesPickedUp': cratesPickedUp,
         'status': status,
         'presaleId': presaleId,
         'presaleNumber': presaleNumber,
@@ -534,6 +564,8 @@ class RouteStop {
     String? error,
     bool clearError = false,
     bool reset = false,
+    int? cratesDelivered,
+    int? cratesPickedUp,
   }) =>
       RouteStop(
         id: id,
@@ -556,6 +588,8 @@ class RouteStop {
         signed: reset ? false : signed ?? this.signed,
         syncState: syncState ?? this.syncState,
         error: clearError || reset ? null : (error ?? this.error),
+        cratesDelivered: reset ? 0 : cratesDelivered ?? this.cratesDelivered,
+        cratesPickedUp: reset ? 0 : cratesPickedUp ?? this.cratesPickedUp,
       );
 }
 
@@ -631,5 +665,100 @@ class DeliveryRoute {
         vehicleDescription: vehicleDescription,
         notes: notes,
         stops: [for (final s in stops) s.id == stop.id ? stop : s],
+      );
+}
+
+// ── Cobrador ─────────────────────────────────────────────
+
+/// Cobro hecho en la calle. El id lo genera el teléfono y es el del recibo en el servidor.
+class Collection {
+  Collection({
+    required this.id,
+    required this.customerId,
+    required this.customerName,
+    required this.amount,
+    required this.paymentMethod,
+    required this.collectedAt,
+    this.receiptNumber,
+    this.status = 'VALID',
+    this.isAdvance = false,
+    this.paidByName,
+    this.cratesPickedUp = 0,
+    this.syncState = SyncState.synced,
+    this.error,
+  });
+
+  final String id;
+  final String customerId;
+  final String customerName;
+  final double amount;
+  final String paymentMethod;
+  final DateTime collectedAt;
+  final String? receiptNumber;
+  final String status; // VALID | ANNULLED
+  final bool isAdvance;
+  final String? paidByName;
+  final int cratesPickedUp;
+  final SyncState syncState;
+  final String? error;
+
+  factory Collection.fromServer(Map<String, dynamic> j) => Collection(
+        id: j['id'] as String,
+        customerId: (j['customerId'] ?? '') as String,
+        customerName: (j['customerName'] ?? '') as String,
+        amount: toDouble(j['amount']),
+        paymentMethod: j['paymentMethod'] as String,
+        collectedAt: DateTime.parse(j['collectedAt'] as String).toLocal(),
+        receiptNumber: j['receiptNumber'] as String?,
+        status: (j['status'] ?? 'VALID') as String,
+        isAdvance: j['isAdvance'] == true,
+      );
+
+  factory Collection.fromJson(Map<String, dynamic> j) => Collection(
+        id: j['id'] as String,
+        customerId: j['customerId'] as String,
+        customerName: j['customerName'] as String,
+        amount: toDouble(j['amount']),
+        paymentMethod: j['paymentMethod'] as String,
+        collectedAt: DateTime.parse(j['collectedAt'] as String).toLocal(),
+        receiptNumber: j['receiptNumber'] as String?,
+        status: (j['status'] ?? 'VALID') as String,
+        isAdvance: j['isAdvance'] == true,
+        paidByName: j['paidByName'] as String?,
+        cratesPickedUp: (j['cratesPickedUp'] as num?)?.toInt() ?? 0,
+        syncState: SyncState.values.byName((j['syncState'] ?? 'synced') as String),
+        error: j['error'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'customerId': customerId,
+        'customerName': customerName,
+        'amount': amount,
+        'paymentMethod': paymentMethod,
+        'collectedAt': collectedAt.toUtc().toIso8601String(),
+        'receiptNumber': receiptNumber,
+        'status': status,
+        'isAdvance': isAdvance,
+        'paidByName': paidByName,
+        'cratesPickedUp': cratesPickedUp,
+        'syncState': syncState.name,
+        'error': error,
+      };
+
+  Collection copyWith({String? receiptNumber, SyncState? syncState, String? error, bool clearError = false}) => Collection(
+        id: id,
+        customerId: customerId,
+        customerName: customerName,
+        amount: amount,
+        paymentMethod: paymentMethod,
+        collectedAt: collectedAt,
+        receiptNumber: receiptNumber ?? this.receiptNumber,
+        status: status,
+        isAdvance: isAdvance,
+        paidByName: paidByName,
+        cratesPickedUp: cratesPickedUp,
+        syncState: syncState ?? this.syncState,
+        error: clearError ? null : (error ?? this.error),
       );
 }

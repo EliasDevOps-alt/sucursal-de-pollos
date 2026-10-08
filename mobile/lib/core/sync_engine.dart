@@ -76,6 +76,9 @@ class SyncEngine {
       case 'PRESALE_UPDATE':
         final p = await db.presale(op.payload['presaleId'] as String);
         if (p != null) await db.savePresale(p.copyWith(syncState: SyncState.synced, clearError: true));
+      case 'COLLECTION_CREATE':
+        final c = await db.collection(op.payload['id'] as String);
+        if (c != null) await db.saveCollection(c.copyWith(receiptNumber: reference, syncState: SyncState.synced, clearError: true));
       case 'DELIVERY_COMPLETE' || 'DELIVERY_FAIL':
         await _updateStop(op.payload['stopId'] as String, (s) => s.copyWith(saleNumber: reference, syncState: SyncState.synced, clearError: true));
     }
@@ -88,6 +91,11 @@ class SyncEngine {
   }
 
   Future<void> _applyFailure(OutboxOp op, String error) async {
+    if (op.type == 'COLLECTION_CREATE') {
+      final c = await db.collection(op.payload['id'] as String);
+      if (c != null) await db.saveCollection(c.copyWith(syncState: SyncState.error, error: error));
+      return;
+    }
     if (op.type == 'DELIVERY_COMPLETE' || op.type == 'DELIVERY_FAIL') {
       await _updateStop(op.payload['stopId'] as String, (s) => s.copyWith(syncState: SyncState.error, error: error));
       return;
@@ -125,6 +133,11 @@ class SyncEngine {
     await db.replaceRoutes(
       (data['routes'] as List? ?? []).map((j) => DeliveryRoute.fromServer(Map<String, dynamic>.from(j as Map))).toList(),
       waitingStops,
+    );
+    // Cobrador: sus cobros recientes (los que aún esperan en la cola quedan como están).
+    await db.replaceCollections(
+      (data['collections'] as List? ?? []).map((j) => Collection.fromServer(Map<String, dynamic>.from(j as Map))).toList(),
+      {for (final o in pendingOps) if (o.type == 'COLLECTION_CREATE') o.payload['id'] as String},
     );
     for (final raw in (data['presales'] as List)) {
       final j = Map<String, dynamic>.from(raw as Map);

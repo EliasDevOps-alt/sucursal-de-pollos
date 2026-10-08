@@ -149,6 +149,12 @@ export class LoadLineDto {
 }
 
 export class DispatchRouteDto {
+  @ApiPropertyOptional({ description: 'Canastillos que salen en el vehículo (desde el almacén de carga)', example: 12 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  cratesLoaded?: number;
+
   @ApiPropertyOptional({ type: [LoadLineDto], description: 'Carga por producto; por defecto, lo pedido' })
   @IsOptional()
   @IsArray()
@@ -169,6 +175,12 @@ export class ReturnLineDto {
 }
 
 export class CloseRouteDto {
+  @ApiPropertyOptional({ description: 'Canastillos contados al volver; si faltan, quedan a cargo del chofer' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  cratesReturned?: number;
+
   @ApiPropertyOptional({ type: [ReturnLineDto], description: 'Sobrante pesado por lote; por defecto, el saldo del vehículo' })
   @IsOptional()
   @IsArray()
@@ -234,6 +246,18 @@ export class DeliverStopDto {
   @MinLength(2, { message: 'Indique quién recibe' })
   receivedByName: string;
 
+  @ApiPropertyOptional({ description: 'Canastillos llenos que quedan con el cliente' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  cratesDelivered?: number;
+
+  @ApiPropertyOptional({ description: 'Canastillos vacíos que el cliente devuelve' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  cratesPickedUp?: number;
+
   @ApiPropertyOptional({ description: 'Firma como imagen PNG (data URL)' })
   @IsOptional()
   @Matches(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/, { message: 'Firma inválida' })
@@ -258,6 +282,12 @@ export class FailStopDto {
   @ApiProperty({ enum: DeliveryProblem })
   @IsEnum(DeliveryProblem)
   problemType: DeliveryProblem;
+
+  @ApiPropertyOptional({ description: 'Canastillos vacíos que el cliente devolvió aunque no se entregó' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  cratesPickedUp?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

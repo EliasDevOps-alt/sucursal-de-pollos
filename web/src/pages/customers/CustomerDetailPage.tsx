@@ -107,6 +107,9 @@ export function CustomerDetailPage() {
                   <Field label="Deuda actual"><Text span fw={700} c={Number(c.currentDebt) > 0 ? 'orange' : undefined}>{fmtBob(c.currentDebt)}</Text></Field>
                 )}
                 <Field label="Disponible">{fmtBob(c.creditAvailable)}</Field>
+                <Field label="Canastillos en su poder">
+                  <Text span fw={c.cratesHeld > 0 ? 700 : undefined} c={c.cratesHeld > 0 ? 'orange' : undefined}>{c.cratesHeld}</Text>
+                </Field>
               </Stack>
             </Card>
             <Card withBorder>

@@ -3,6 +3,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 
 import 'core/local_db.dart';
+import 'screens/collector/collector_home_screen.dart';
 import 'screens/driver/driver_home_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -24,7 +25,7 @@ class PreventaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final seed = const Color(0xFFEB6834);
     return MaterialApp(
-      title: 'ERP Pollos · Preventa y entregas',
+      title: 'ERP Pollos · Preventa, entregas y cobranza',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
       darkTheme: ThemeData(colorSchemeSeed: seed, useMaterial3: true, brightness: Brightness.dark),
@@ -33,7 +34,9 @@ class PreventaApp extends StatelessWidget {
             ? const LoginScreen()
             : s.isDriver
                 ? const DriverHomeScreen()
-                : const HomeScreen(),
+                : s.isCollector
+                    ? const CollectorHomeScreen()
+                    : const HomeScreen(),
       ),
     );
   }

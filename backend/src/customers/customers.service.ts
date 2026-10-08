@@ -68,7 +68,8 @@ export class CustomersService {
       },
     });
     if (!customer) throw new NotFoundException('Cliente no encontrado');
-    return withCredit(customer);
+    const crates = await this.prisma.crateBalance.findUnique({ where: { holderType_holderId: { holderType: 'CUSTOMER', holderId: id } } });
+    return { ...withCredit(customer), cratesHeld: crates?.quantity ?? 0 };
   }
 
   async create(dto: CreateCustomerDto, actor: AuthUser) {

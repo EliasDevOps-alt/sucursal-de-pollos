@@ -7,6 +7,7 @@ import {
   IsArray,
   IsDateString,
   IsIn,
+  IsInt,
   IsLatitude,
   IsLongitude,
   IsNotEmpty,
@@ -15,6 +16,7 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  Matches,
   Min,
   validate,
   ValidateNested,
@@ -199,7 +201,7 @@ export class GpsPositionPayload {
   @Min(0)
   accuracyMeters?: number;
 
-  @IsIn(['PERIODIC', 'PRESALE', 'CUSTOMER_CREATE', 'VISIT', 'DELIVERY', 'DELIVERY_FAIL'])
+  @IsIn(['PERIODIC', 'PRESALE', 'CUSTOMER_CREATE', 'VISIT', 'DELIVERY', 'DELIVERY_FAIL', 'COLLECTION'])
   eventType: string;
 
   @IsOptional()
@@ -215,6 +217,65 @@ export class DeliveryCompletePayload extends DeliverStopDto {
 export class DeliveryFailPayload extends FailStopDto {
   @IsUUID()
   stopId: string;
+}
+
+/** Cobro en la calle: el id lo genera el teléfono y es el del cobro (recibo) en el servidor. */
+export class CollectionCreatePayload {
+  @IsUUID()
+  id: string;
+
+  @IsUUID()
+  customerId: string;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  amount: number;
+
+  @IsIn(['EFECTIVO', 'QR', 'TRANSFERENCIA'])
+  paymentMethod: 'EFECTIVO' | 'QR' | 'TRANSFERENCIA';
+
+  @IsOptional()
+  @IsString()
+  referenceNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  paidByName?: string;
+
+  @IsOptional()
+  @Matches(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/, { message: 'Firma inválida' })
+  signature?: string;
+
+  @IsOptional()
+  @IsLatitude()
+  latitude?: number;
+
+  @IsOptional()
+  @IsLongitude()
+  longitude?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  cratesPickedUp?: number;
+}
+
+/** Canastillos vacíos que el cobrador recoge sin cobrar. */
+export class CratePickupPayload {
+  @IsUUID()
+  customerId: string;
+
+  @IsInt()
+  @Min(1)
+  quantity: number;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }
 
 /** Convierte y valida; devuelve la instancia o lanza un Error con los mensajes legibles. */

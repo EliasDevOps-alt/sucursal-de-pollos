@@ -219,6 +219,7 @@ export interface ReceivableMovement {
 }
 
 export interface CustomerDetail extends Customer {
+  cratesHeld: number;
   sales: { id: string; saleNumber: string; createdAt: string; totalAmount: Dec; paymentStatus: PaymentStatus; status: SaleStatus }[];
   receivableMovements: ReceivableMovement[];
 }
@@ -560,6 +561,57 @@ export interface Collection {
   annulledBy: { fullName: string } | null;
   customer: { id: string; code: string; name: string; currentDebt: Dec };
   receivedBy: { id: string; fullName: string };
+  paidByName: string | null;
+  signature?: string | null;
+  latitude: Dec | null;
+  longitude: Dec | null;
+  collectedAtDevice: string | null;
+}
+
+export interface PendingCustomer {
+  id: string;
+  code: string;
+  name: string;
+  phone: string | null;
+  debt: Dec;
+  creditLimit: Dec;
+  crates: number;
+  address: string | null;
+  latitude: Dec | null;
+  longitude: Dec | null;
+  daysOutstanding: number | null;
+  lastPayment: string | null;
+}
+
+// ── Canastillos ────────────────────────────────────────────
+export type CrateHolderType = 'WAREHOUSE' | 'CUSTOMER' | 'USER';
+export interface CrateHolder {
+  holderType: CrateHolderType;
+  holderId: string;
+  quantity: number;
+  name: string;
+  kind: string;
+}
+export interface CrateBalances {
+  total: number;
+  inWarehouses: number;
+  inVehicles: number;
+  withCustomers: number;
+  withPeople: number;
+  holders: CrateHolder[];
+}
+export interface CrateMovement {
+  id: string;
+  type: string;
+  quantity: number;
+  reason: string | null;
+  chargeAmount: Dec | null;
+  referenceType: string | null;
+  referenceId: string | null;
+  createdAt: string;
+  createdBy: { fullName: string };
+  from: { type: CrateHolderType; id: string; name: string; kind: string } | null;
+  to: { type: CrateHolderType; id: string; name: string; kind: string } | null;
 }
 
 // ── Administración ─────────────────────────────────────────
@@ -643,6 +695,7 @@ export type RouteStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type StopStatus = 'PENDING' | 'DELIVERED' | 'PARTIAL' | 'FAILED';
 
 export interface RouteSummary {
+  crates?: { loaded: number; delivered: number; pickedUp: number; expectedBack: number; returned: number | null };
   stops: number;
   delivered: number;
   failed: number;
@@ -679,6 +732,8 @@ export interface RouteStop {
   creditAuthReason: string | null;
   receivedByName: string | null;
   signature: string | null;
+  cratesDelivered: number;
+  cratesPickedUp: number;
   paidAmount: Dec;
   paymentMethod: string | null;
   problemType: string | null;
@@ -710,6 +765,8 @@ export interface RouteDetail extends Omit<RouteListItem, 'summary' | 'vehicle'> 
   closedBy: { fullName: string } | null;
   closedAt: string | null;
   closeNotes: string | null;
+  cratesLoaded: number;
+  cratesReturned: number | null;
   cancelledBy: { fullName: string } | null;
   cancelReason: string | null;
   createdAt: string;

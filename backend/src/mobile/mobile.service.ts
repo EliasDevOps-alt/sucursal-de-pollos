@@ -5,10 +5,14 @@ import { AuthUser } from '../auth/auth-user';
 import { D, kg, money, ZERO } from '../common/decimal';
 import { SequenceService } from '../common/sequence.service';
 import { PERMISSIONS } from '../auth/permissions';
+import { CollectionsService } from '../collections/collections.service';
+import { CratesService } from '../crates/crates.service';
 import { RoutesService } from '../logistics/routes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CustomerAddressAddPayload,
+  CollectionCreatePayload,
+  CratePickupPayload,
   CustomerCreatePayload,
   DeliveryCompletePayload,
   DeliveryFailPayload,
@@ -44,6 +48,8 @@ export class MobileService {
     private readonly sequences: SequenceService,
     private readonly audit: AuditService,
     private readonly routes: RoutesService,
+    private readonly collections: CollectionsService,
+    private readonly crates: CratesService,
   ) {}
 
   async registerDevice(dto: RegisterDeviceDto, user: AuthUser) {
@@ -86,6 +92,17 @@ export class MobileService {
           GROUP BY ib.product_id, ib.warehouse_id`
       : [];
     const stockByProduct = new Map(stock.map((s) => [s.product_id, s]));
+
+    // Para cobrar: canastillos que tiene cada cliente y desde cuándo debe (cargo más antiguo sin saldar).
+    const debtInfo = await this.prisma.$queryRaw<{ id: string; crates: number | null; oldest_charge: Date | null }[]>`
+      SELECT c.id,
+        (SELECT cb.quantity FROM crate_balances cb WHERE cb.holder_type = 'CUSTOMER' AND cb.holder_id = c.id) AS crates,
+        CASE WHEN c.current_debt > 0 THEN (SELECT MIN(rm.created_at) FROM receivable_movements rm
+          WHERE rm.customer_id = c.id AND rm.movement_type = 'CHARGE'
+            AND rm.created_at > COALESCE((SELECT MAX(z.created_at) FROM receivable_movements z WHERE z.customer_id = c.id AND z.balance_after <= 0), '-infinity'::timestamp))
+        END AS oldest_charge
+      FROM customers c WHERE c.status = 'ACTIVE'`;
+    const debtById = new Map(debtInfo.map((d) => [d.id, d]));
 
     const [products, customers, customerTypes, presales] = await Promise.all([
       this.prisma.product.findMany({
@@ -131,6 +148,8 @@ export class MobileService {
         creditEnabled: c.creditEnabled,
         creditAvailable: c.creditEnabled ? money(Prisma.Decimal.max(0, D(c.creditLimit).minus(c.currentDebt))) : ZERO,
         currentDebt: c.currentDebt,
+        cratesHeld: Number(debtById.get(c.id)?.crates ?? 0),
+        debtSince: debtById.get(c.id)?.oldest_charge ?? null,
         addresses: c.addresses.map((a) => ({
           id: a.id,
           label: a.label,
@@ -143,10 +162,33 @@ export class MobileService {
       customerTypes: customerTypes.map((t) => ({ id: t.id, name: t.name })),
       presales,
       // Chofer: sus rutas con paradas, pedidos y lo ya registrado (sin las firmas, para no pesar).
+      // Cobrador: sus cobros de los últimos días (para ver lo cobrado y los recibos).
+      collections: user.permissions.includes(PERMISSIONS.COLLECTIONS_CREATE) && !user.permissions.includes(PERMISSIONS.PRESALES_CREATE)
+        ? await this.myCollections(user.id)
+        : [],
       routes: user.permissions.includes(PERMISSIONS.DELIVERIES_REGISTER)
         ? (await this.routes.forDriver(user.id)).map((r) => ({ ...r, stops: r.stops.map(({ signature, ...s }) => ({ ...s, signed: !!signature })) }))
         : [],
     };
+  }
+
+  private async myCollections(userId: string) {
+    const rows = await this.prisma.payment.findMany({
+      where: { receivedById: userId, saleId: null, paymentDate: { gte: new Date(Date.now() - 7 * 86_400_000) } },
+      include: { customer: { select: { id: true, name: true } } },
+      orderBy: { paymentDate: 'desc' },
+    });
+    return rows.map((p) => ({
+      id: p.id,
+      receiptNumber: p.receiptNumber,
+      customerId: p.customerId,
+      customerName: p.customer?.name ?? '',
+      amount: p.amount,
+      paymentMethod: p.paymentMethod,
+      status: p.status,
+      isAdvance: p.isAdvance,
+      collectedAt: p.collectedAtDevice ?? p.paymentDate,
+    }));
   }
 
   private async myPresales(userId: string) {
@@ -474,6 +516,46 @@ export class MobileService {
           this.routes.failInTx(tx, stopId, dto, user, { at: new Date(op.createdAtDevice), operationId: op.deviceOperationId }),
         );
         return { entityType: 'route_stop', entityId: r.stopId, reference: null };
+      }
+
+      case 'COLLECTION_CREATE': {
+        need(PERMISSIONS.COLLECTIONS_CREATE);
+        const p = await parsePayload(CollectionCreatePayload, op.payload);
+        const id = await this.asOperation(() =>
+          this.collections.createInTx(
+            tx,
+            { customerId: p.customerId, amount: p.amount, paymentMethod: p.paymentMethod, referenceNumber: p.referenceNumber, notes: p.notes },
+            user,
+            {
+              id: p.id,
+              operationId: op.deviceOperationId,
+              at: new Date(op.createdAtDevice),
+              paidByName: p.paidByName?.trim() || undefined,
+              signature: p.signature,
+              latitude: p.latitude,
+              longitude: p.longitude,
+              cratesPickedUp: p.cratesPickedUp,
+            },
+          ),
+        );
+        const payment = await tx.payment.findUniqueOrThrow({ where: { id } });
+        return { entityType: 'payment', entityId: id, reference: payment.receiptNumber };
+      }
+
+      case 'CRATE_PICKUP': {
+        need(PERMISSIONS.COLLECTIONS_CREATE);
+        const p = await parsePayload(CratePickupPayload, op.payload);
+        const customer = await tx.customer.findUnique({ where: { id: p.customerId } });
+        if (!customer) throw new OperationError('Cliente inexistente');
+        const mv = await this.crates.move(tx, {
+          type: 'PICKUP',
+          quantity: p.quantity,
+          from: { type: 'CUSTOMER', id: customer.id },
+          to: { type: 'USER', id: user.id },
+          reason: p.notes?.trim() || 'Recogidos por el cobrador',
+          actorId: user.id,
+        });
+        return { entityType: 'crate_movement', entityId: mv.id, reference: null };
       }
 
       case 'GPS_POSITION': {

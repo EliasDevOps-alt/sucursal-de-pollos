@@ -17,12 +17,14 @@ class LocalDb {
     final db = await f.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 2,
+        version: 3,
         onUpgrade: (db, oldVersion, _) async {
-          // v2: rutas de entrega del chofer.
+          // v2: rutas de entrega del chofer. v3: cobros del cobrador.
           if (oldVersion < 2) await db.execute('CREATE TABLE routes (id TEXT PRIMARY KEY, route_date TEXT, json TEXT)');
+          if (oldVersion < 3) await db.execute('CREATE TABLE collections (id TEXT PRIMARY KEY, collected_at TEXT, json TEXT)');
         },
         onCreate: (db, _) async {
+          await db.execute('CREATE TABLE collections (id TEXT PRIMARY KEY, collected_at TEXT, json TEXT)');
           await db.execute('CREATE TABLE routes (id TEXT PRIMARY KEY, route_date TEXT, json TEXT)');
           await db.execute('CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT)');
           await db.execute('CREATE TABLE products (id TEXT PRIMARY KEY, name TEXT, json TEXT)');
@@ -144,6 +146,32 @@ class LocalDb {
     });
   }
 
+  // ── Cobros del cobrador ─────────────────────────────────
+  Future<List<Collection>> collections() async => (await _db.query('collections', orderBy: 'collected_at DESC'))
+      .map((r) => Collection.fromJson(jsonDecode(r['json'] as String) as Map<String, dynamic>))
+      .toList();
+
+  Future<Collection?> collection(String id) async {
+    final rows = await _db.query('collections', where: 'id = ?', whereArgs: [id]);
+    return rows.isEmpty ? null : Collection.fromJson(jsonDecode(rows.first['json'] as String) as Map<String, dynamic>);
+  }
+
+  Future<void> saveCollection(Collection c) => _db.insert('collections', {'id': c.id, 'collected_at': c.collectedAt.toUtc().toIso8601String(), 'json': jsonEncode(c.toJson())},
+      conflictAlgorithm: ConflictAlgorithm.replace);
+
+  Future<void> deleteCollection(String id) => _db.delete('collections', where: 'id = ?', whereArgs: [id]);
+
+  /// Reemplaza con lo del servidor, conservando los cobros que el teléfono aún no envió.
+  Future<void> replaceCollections(List<Collection> fromServer, Set<String> waitingIds) async {
+    final waiting = (await collections()).where((c) => waitingIds.contains(c.id)).toList();
+    await _db.transaction((tx) async {
+      await tx.delete('collections');
+      for (final c in [...fromServer.where((c) => !waitingIds.contains(c.id)), ...waiting]) {
+        await tx.insert('collections', {'id': c.id, 'collected_at': c.collectedAt.toUtc().toIso8601String(), 'json': jsonEncode(c.toJson())});
+      }
+    });
+  }
+
   // ── Cola de salida ──────────────────────────────────────
   Future<void> enqueue(OutboxOp op) => _db.insert('outbox', {
         'id': op.id,
@@ -185,7 +213,7 @@ class LocalDb {
 
   /// Borra todo (al cerrar sesión, solo si no quedan operaciones sin enviar).
   Future<void> clearAll() async {
-    for (final t in ['products', 'customers', 'customer_types', 'presales', 'routes', 'outbox']) {
+    for (final t in ['products', 'customers', 'customer_types', 'presales', 'routes', 'collections', 'outbox']) {
       await _db.delete(t);
     }
   }

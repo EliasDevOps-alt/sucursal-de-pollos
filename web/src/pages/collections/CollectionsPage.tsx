@@ -1,17 +1,19 @@
-import { ActionIcon, Anchor, Badge, Button, Card, Group, Modal, Select, Stack, Table, Text, Textarea, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Badge, Button, Card, Group, Modal, Select, Stack, Table, Tabs, Text, Textarea, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconBan, IconCash } from '@tabler/icons-react';
+import { IconBan, IconCash, IconMap, IconReceipt } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Collection, Customer } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
-import { fmtBob, fmtDateTime, PAYMENT_LABELS } from '../../lib/format';
+import { fmtBob, fmtDateTime, PAYMENT_LABELS, PAYMENT_SOURCE_LABELS } from '../../lib/format';
 import { notifyError, notifyOk } from '../../lib/notify';
 import { CollectionModal } from './CollectionModal';
+import { CollectionReceiptModal } from './CollectionReceiptModal';
+import { PendingMapTab } from './PendingMapTab';
 
 export function CollectionsPage() {
   const { can } = useAuth();
@@ -22,6 +24,9 @@ export function CollectionsPage() {
   const [collecting, setCollecting] = useState(false);
   const [annulling, setAnnulling] = useState<Collection | null>(null);
   const [reason, setReason] = useState('');
+  const [receiptId, setReceiptId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'mapa' ? 'mapa' : 'cobros';
 
   const customers = useQuery({
     queryKey: ['customers', { debounced, withDebt: false }],
@@ -53,7 +58,7 @@ export function CollectionsPage() {
     <>
       <PageHeader
         title="Cobranza"
-        subtitle="Cobros de deuda de clientes: cada uno con su recibo y un solo método de pago"
+        subtitle="Cobros de deuda en oficina y en la calle (cobrador): cada uno con su recibo y un solo método de pago"
         actions={
           can('collections.create') && (
             <Button leftSection={<IconCash size={16} />} disabled={!selected} onClick={() => setCollecting(true)}>
@@ -62,6 +67,13 @@ export function CollectionsPage() {
           )
         }
       />
+      <Tabs value={tab} onChange={(v) => setParams(v === 'mapa' ? { tab: v } : {})} keepMounted={false}>
+        <Tabs.List mb="md">
+          <Tabs.Tab value="cobros" leftSection={<IconReceipt size={16} />}>Cobros</Tabs.Tab>
+          <Tabs.Tab value="mapa" leftSection={<IconMap size={16} />}>Mapa de pendientes</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="mapa"><PendingMapTab /></Tabs.Panel>
+        <Tabs.Panel value="cobros">
       <Group mb="sm" align="flex-end">
         <Select
           label="Cliente"
@@ -117,7 +129,10 @@ export function CollectionsPage() {
                         {c.referenceNumber && <Text size="xs" c="dimmed">{c.referenceNumber}</Text>}
                       </Table.Td>
                       <Table.Td ta="right" fw={600}>{fmtBob(c.amount)}</Table.Td>
-                      <Table.Td>{c.receivedBy.fullName}</Table.Td>
+                      <Table.Td>
+                        {c.receivedBy.fullName}
+                        <Text size="xs" c="dimmed">{PAYMENT_SOURCE_LABELS[c.paymentSource] ?? c.paymentSource}{c.paidByName ? ` · pagó ${c.paidByName}` : ''}</Text>
+                      </Table.Td>
                       <Table.Td>
                         <Stack gap={2}>
                           <Group gap={4}>
@@ -127,7 +142,12 @@ export function CollectionsPage() {
                           {c.annulReason && <Text size="xs" c="dimmed">{c.annulReason} · {c.annulledBy?.fullName}</Text>}
                         </Stack>
                       </Table.Td>
-                      <Table.Td>
+                      <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                        <Tooltip label="Ver recibo">
+                          <ActionIcon variant="subtle" onClick={() => setReceiptId(c.id)} aria-label="Ver recibo">
+                            <IconReceipt size={16} />
+                          </ActionIcon>
+                        </Tooltip>
                         {c.status === 'VALID' && can('collections.annul') && (
                           <Tooltip label="Anular cobro">
                             <ActionIcon variant="subtle" color="red" onClick={() => setAnnulling(c)} aria-label="Anular cobro">
@@ -144,7 +164,10 @@ export function CollectionsPage() {
           )}
         </Card>
       </QueryState>
+        </Tabs.Panel>
+      </Tabs>
 
+      <CollectionReceiptModal id={receiptId} onClose={() => setReceiptId(null)} />
       <CollectionModal opened={collecting} onClose={() => setCollecting(false)} customer={selected} />
 
       <Modal opened={!!annulling} onClose={() => setAnnulling(null)} title={`Anular cobro ${annulling?.receiptNumber ?? ''}`}>

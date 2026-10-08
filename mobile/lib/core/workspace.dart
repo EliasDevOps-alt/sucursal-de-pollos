@@ -225,6 +225,8 @@ class Workspace {
     String? signaturePng,
     String? notes,
     GeoPoint? location,
+    int cratesDelivered = 0,
+    int cratesPickedUp = 0,
   }) async {
     final route = await db.routeOfStop(stop.id);
     if (route == null || !route.inProgress) throw StateError('La ruta no está en curso');
@@ -239,6 +241,8 @@ class Workspace {
       signed: signaturePng != null,
       syncState: SyncState.pending,
       clearError: true,
+      cratesDelivered: cratesDelivered,
+      cratesPickedUp: cratesPickedUp,
     );
     await db.saveRoute(route.withStop(updated));
     if (location != null) await recordPosition(location, 'DELIVERY', referenceId: stop.id);
@@ -259,6 +263,8 @@ class Workspace {
         'paidAmount': double.parse(paidAmount.toStringAsFixed(2)),
         if (paidAmount > 0 && paymentMethod != null) 'paymentMethod': paymentMethod,
         'receivedByName': receivedByName.trim(),
+        if (cratesDelivered > 0) 'cratesDelivered': cratesDelivered,
+        if (cratesPickedUp > 0) 'cratesPickedUp': cratesPickedUp,
         if (signaturePng != null) 'signature': signaturePng,
         if (_blankToNull(notes) != null) 'notes': notes!.trim(),
         if (location != null) 'latitude': location.latitude,
@@ -290,9 +296,73 @@ class Workspace {
     return updated;
   }
 
+  // ── Cobrador ────────────────────────────────────────────
+
+  /// Cobro en la calle: queda en el teléfono (con la deuda y los canastillos del cliente ya descontados) y se encola.
+  Future<Collection> collect(
+    Customer customer, {
+    required double amount,
+    required String paymentMethod,
+    String? referenceNumber,
+    String? paidByName,
+    String? signaturePng,
+    String? notes,
+    int cratesPickedUp = 0,
+    GeoPoint? location,
+  }) async {
+    final id = _uuid.v4();
+    final c = Collection(
+      id: id,
+      customerId: customer.id,
+      customerName: customer.name,
+      amount: amount,
+      paymentMethod: paymentMethod,
+      collectedAt: DateTime.now(),
+      isAdvance: amount > customer.currentDebt + 0.005,
+      paidByName: _blankToNull(paidByName),
+      cratesPickedUp: cratesPickedUp,
+      syncState: SyncState.pending,
+    );
+    await db.saveCollection(c);
+    await db.saveCustomer(customer.copyWith(currentDebt: double.parse((customer.currentDebt - amount).toStringAsFixed(2)), cratesHeld: customer.cratesHeld - cratesPickedUp));
+    if (location != null) await recordPosition(location, 'COLLECTION', referenceId: id);
+    await db.enqueue(OutboxOp(
+      id: _uuid.v4(),
+      type: 'COLLECTION_CREATE',
+      createdAt: DateTime.now(),
+      payload: {
+        'id': id,
+        'customerId': customer.id,
+        'amount': double.parse(amount.toStringAsFixed(2)),
+        'paymentMethod': paymentMethod,
+        if (_blankToNull(referenceNumber) != null) 'referenceNumber': referenceNumber!.trim(),
+        if (_blankToNull(notes) != null) 'notes': notes!.trim(),
+        if (_blankToNull(paidByName) != null) 'paidByName': paidByName!.trim(),
+        if (signaturePng != null) 'signature': signaturePng,
+        if (cratesPickedUp > 0) 'cratesPickedUp': cratesPickedUp,
+        if (location != null) 'latitude': location.latitude,
+        if (location != null) 'longitude': location.longitude,
+      },
+    ));
+    return c;
+  }
+
+  /// Canastillos vacíos que el cliente devuelve sin pagar nada.
+  Future<void> pickupCrates(Customer customer, int quantity, {String? notes, GeoPoint? location}) async {
+    await db.saveCustomer(customer.copyWith(cratesHeld: customer.cratesHeld - quantity));
+    if (location != null) await recordPosition(location, 'COLLECTION', referenceId: customer.id);
+    await db.enqueue(OutboxOp(
+      id: _uuid.v4(),
+      type: 'CRATE_PICKUP',
+      createdAt: DateTime.now(),
+      payload: {'customerId': customer.id, 'quantity': quantity, if (_blankToNull(notes) != null) 'notes': notes!.trim()},
+    ));
+  }
+
   /// Descarta una operación que el servidor rechazó (queda la decisión al usuario).
   Future<void> discard(OutboxOp op) async {
     await db.removeOp(op.id);
+    if (op.type == 'COLLECTION_CREATE') await db.deleteCollection(op.payload['id'] as String);
     if (op.type == 'DELIVERY_COMPLETE' || op.type == 'DELIVERY_FAIL') {
       // La parada vuelve a pendiente en el teléfono para registrarla de nuevo.
       final stopId = op.payload['stopId'] as String;

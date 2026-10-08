@@ -69,6 +69,7 @@ async function seedUsers(branch1Id: string) {
     { username: 'preventista', password: 'Demo123!', fullName: 'Preventista Demo', role: 'PRESELLER' },
     { username: 'contador', password: 'Demo123!', fullName: 'Contador Demo', role: 'ACCOUNTANT' },
     { username: 'chofer', password: 'Demo123!', fullName: 'Chofer Demo', role: 'DRIVER' },
+    { username: 'cobrador', password: 'Demo123!', fullName: 'Cobrador Demo', role: 'COLLECTOR' },
   ];
 
   for (const u of users) {

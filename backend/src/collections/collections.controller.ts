@@ -20,6 +20,13 @@ export class CollectionsController {
     return this.collections.findAll(filters);
   }
 
+  /** Clientes con deuda o canastillos por recoger, con ubicación (mapa de cobranza). */
+  @Get('pending-map')
+  @RequirePermissions(PERMISSIONS.COLLECTIONS_VIEW)
+  pendingMap() {
+    return this.collections.pendingMap();
+  }
+
   @Get(':id')
   @RequirePermissions(PERMISSIONS.COLLECTIONS_VIEW)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
