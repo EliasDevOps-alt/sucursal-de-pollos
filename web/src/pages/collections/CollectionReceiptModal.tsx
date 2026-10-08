@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import type { Collection } from '../../api/types';
 import { QueryState } from '../../components/QueryState';
+import { ReceiptButton } from '../../components/ReceiptButton';
 import { fmtBob, fmtDateTime, PAYMENT_LABELS, PAYMENT_SOURCE_LABELS } from '../../lib/format';
 
 /** Recibo de cobranza: número, monto, quién cobró y quién pagó, firma y lugar (si se cobró en la calle). */
@@ -58,6 +59,7 @@ export function CollectionReceiptModal({ id, onClose }: { id: string | null; onC
               </Anchor>
             )}
             {c.annulReason && <Text size="sm" c="dimmed">Anulado: {c.annulReason} · {c.annulledBy?.fullName}</Text>}
+            <ReceiptButton type="cobro" id={c.id} label="Imprimir recibo" />
           </Stack>
         )}
       </QueryState>

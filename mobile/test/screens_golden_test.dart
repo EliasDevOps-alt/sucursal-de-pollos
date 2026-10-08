@@ -4,6 +4,7 @@
 @Tags(['golden'])
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:erp_preventa/core/local_db.dart';
@@ -18,6 +19,10 @@ import 'package:erp_preventa/screens/driver/delivery_form_screen.dart';
 import 'package:erp_preventa/screens/driver/driver_home_screen.dart';
 import 'package:erp_preventa/screens/driver/signature_pad.dart';
 import 'package:erp_preventa/screens/driver/stop_screen.dart';
+import 'package:erp_preventa/screens/printing/printer_settings_screen.dart';
+import 'package:erp_preventa/screens/printing/receipt_screen.dart';
+import 'package:erp_preventa/printing/escpos.dart';
+import 'package:erp_preventa/printing/printer_service.dart';
 import 'package:erp_preventa/screens/home_screen.dart';
 import 'package:erp_preventa/screens/presale_detail_screen.dart';
 import 'package:erp_preventa/screens/presale_form_screen.dart';
@@ -27,12 +32,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class _FixedLocation extends LocationService {
   @override
   Future<GeoPoint?> current({Duration timeout = const Duration(seconds: 10)}) async => GeoPoint(-17.7833, -63.1821, accuracy: 7);
+}
+
+class _FakePrinters implements PrinterTransport {
+  @override
+  Future<void> ensurePermissions() async {}
+  @override
+  Future<List<PrinterDevice>> paired() async => const [PrinterDevice('MTP-II', '66:22:B3:01:02:03'), PrinterDevice('Auriculares JBL', '0C:A6:94:11:22:33')];
+  @override
+  Future<void> send(String address, List<int> bytes) async {}
+}
+
+/// Firma de ejemplo (trazo ondulado), como la exporta el panel de firma.
+String _signature() {
+  final im = img.Image(width: 300, height: 100, numChannels: 4);
+  for (var i = 0; i < 26; i++) {
+    final x = 20 + i * 10;
+    img.drawLine(im, x1: x, y1: 55 + (i.isEven ? -18 : 14), x2: x + 10, y2: 55 + (i.isEven ? 14 : -18), color: img.ColorRgba8(0, 0, 0, 255), thickness: 3);
+  }
+  return 'data:image/png;base64,${base64Encode(img.encodePng(im))}';
 }
 
 Future<void> _loadFonts() async {
@@ -45,6 +71,14 @@ Future<void> _loadFonts() async {
     ..addFont(read('roboto-bold.ttf'));
   await roboto.load();
   await (FontLoader('MaterialIcons')..addFont(read('materialicons-regular.otf'))).load();
+  // El ticket usa letra monoespaciada (como la térmica); en la PC de pruebas se usa Consolas.
+  Future<ByteData> win(String f) async => ByteData.view(Uint8List.fromList(await File('C:/Windows/Fonts/$f').readAsBytes()).buffer);
+  if (File('C:/Windows/Fonts/consola.ttf').existsSync()) {
+    await (FontLoader('monospace')
+          ..addFont(win('consola.ttf'))
+          ..addFont(win('consolab.ttf')))
+        .load();
+  }
 }
 
 Future<AppState> _seed() async {
@@ -82,7 +116,8 @@ Future<AppState> _seed() async {
     scheduledDeliveryDate: '2026-10-08',
     notes: 'Entregar antes de las 9',
   );
-  final state = AppState(db: db, location: _FixedLocation())
+  await db.setValue('company', jsonEncode({'name': 'Distribuidora de Pollos', 'nit': '1023456027', 'address': 'Av. Principal #100, Santa Cruz', 'phone': '3-3456789', 'footer': 'Gracias por su compra'}));
+  final state = AppState(db: db, location: _FixedLocation(), printer: PrinterService(transport: _FakePrinters()))
     ..user = SessionUser(id: 'u1', username: 'preventista', fullName: 'Preventista Demo', roleName: 'Preventista', permissions: ['presales.create'])
     ..deviceUuid = '3f2a9c1e-0000-4000-8000-000000000000'
     ..online = false
@@ -166,17 +201,27 @@ Widget _app(AppState s, Widget home) => ChangeNotifierProvider.value(
 void main() {
   sqfliteFfiInit();
   setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
     await initializeDateFormatting('es');
     await _loadFonts();
   });
 
-  Future<void> shot(WidgetTester tester, String name, Widget Function(AppState) build, {Future<void> Function(WidgetTester)? act, bool driver = false, bool collector = false}) async {
+  Future<void> shot(WidgetTester tester, String name, Widget Function(AppState) build,
+      {Future<void> Function(WidgetTester)? act, Future<void> Function(AppState)? prepare, bool driver = false, bool collector = false}) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     late AppState s;
-    await tester.runAsync(() async => s = driver ? await _seedDriver() : collector ? await _seedCollector() : await _seed());
+    await tester.runAsync(() async {
+      s = driver ? await _seedDriver() : collector ? await _seedCollector() : await _seed();
+      if (prepare != null) await prepare(s);
+    });
     await tester.pumpWidget(_app(s, build(s)));
+    // Las pantallas que leen la base local al abrir (comprobante, impresoras) necesitan E/S real.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    await tester.pumpAndSettle();
+    // …y las imágenes (firma) se decodifican fuera del reloj falso.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pumpAndSettle();
     if (act != null) await act(tester);
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/$name.png'));
@@ -240,5 +285,32 @@ void main() {
         await t.tap(find.byTooltip('Más'));
         await t.tap(find.byTooltip('Más'));
         await t.pumpAndSettle();
+      }));
+
+  // Comprobantes
+  testWidgets('cobrador: recibo con firma sin enviar', (t) {
+    late Collection c;
+    return shot(t, 'cobrador_recibo', (s) => ReceiptScreen(load: (s) => s.collectionReceipt(c)), collector: true, prepare: (s) async {
+      // Fijo (sin uuid ni hora actual) para que la imagen sea estable.
+      c = Collection(id: '8a0ed214-5c3e-4f7a-9d1b-2e6f0a9c4b11', customerId: 'c1', customerName: 'Pollería Doña Juana', amount: 500, paymentMethod: 'EFECTIVO',
+          collectedAt: DateTime(2026, 10, 8, 11, 25), paidByName: 'Juana Pérez', cratesPickedUp: 2, syncState: SyncState.pending);
+      await s.db.saveCollection(c);
+      await s.db.enqueue(OutboxOp(id: 'op-k9', type: 'COLLECTION_CREATE', createdAt: c.collectedAt, payload: {
+        'id': c.id, 'customerId': 'c1', 'amount': 500, 'paymentMethod': 'EFECTIVO', 'paidByName': 'Juana Pérez', 'signature': _signature(), 'cratesPickedUp': 2,
+      }));
+      await s.db.saveCustomer(s.customers.firstWhere((x) => x.id == 'c1').copyWith(currentDebt: 1340.5));
+      await s.printer.choose(const PrinterDevice('MTP-II', '66:22:B3:01:02:03'), PaperWidth.mm58);
+      await s.reload();
+    });
+  });
+  testWidgets('chofer: comprobante de entrega parcial', (t) => shot(t, 'chofer_comprobante',
+      (s) => ReceiptScreen(load: (s) => s.deliveryReceipt(s.routes.first, s.routes.first.stops.firstWhere((x) => x.id == 's3'))), driver: true,
+      prepare: (s) async {
+        await s.db.enqueue(OutboxOp(id: 'op-s3', type: 'DELIVERY_COMPLETE', createdAt: DateTime(2026, 10, 7, 10, 52),
+            payload: {'stopId': 's3', 'receivedByName': 'Rosa Mamani', 'signature': _signature()}));
+        await s.reload();
+      }));
+  testWidgets('impresora', (t) => shot(t, 'impresora', (_) => const PrinterSettingsScreen(), collector: true, prepare: (s) async {
+        await s.printer.choose(const PrinterDevice('MTP-II', '66:22:B3:01:02:03'), PaperWidth.mm58);
       }));
 }

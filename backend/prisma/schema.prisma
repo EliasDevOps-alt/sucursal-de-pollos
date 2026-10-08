@@ -337,6 +337,7 @@ model User {
   cashSessionsClosed   CashSession[]         @relation("CashSessionClosedBy")
   settlementsGiven     Settlement[]          @relation("SettlementUser")
   settlementsReceived  Settlement[]          @relation("SettlementReceivedBy")
+  receiptPrints        ReceiptPrint[]
 
   @@map("users")
 }
@@ -1443,4 +1444,39 @@ model Settlement {
 
   @@index([userId, createdAt])
   @@map("settlements")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Recibos: datos del negocio e historial de impresiones
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Configuración simple clave/valor (datos del negocio para los recibos).
+ */
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
+
+/**
+ * Cada impresión de un comprobante: la primera es el original; las siguientes, copias numeradas.
+ */
+model ReceiptPrint {
+  id             String   @id @default(uuid()) @db.Uuid
+  documentType   String   @map("document_type") // SALE, DELIVERY, COLLECTION, SETTLEMENT, CASH_SESSION
+  documentId     String   @map("document_id") @db.Uuid
+  documentNumber String   @map("document_number")
+  copyNumber     Int      @map("copy_number") // 0 = original
+  channel        String // WEB, BLUETOOTH
+  printedById    String   @map("printed_by_id") @db.Uuid
+  printedAt      DateTime @default(now()) @map("printed_at")
+
+  printedBy User @relation(fields: [printedById], references: [id])
+
+  @@index([documentType, documentId])
+  @@index([printedAt])
+  @@map("receipt_prints")
 }

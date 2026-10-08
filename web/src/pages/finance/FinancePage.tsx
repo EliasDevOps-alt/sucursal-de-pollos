@@ -9,6 +9,7 @@ import type { CashAccountRow, CashMovementRow, CashSessionRow, CashSummary, Sess
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
+import { ReceiptButton } from '../../components/ReceiptButton';
 import { ChartCard } from '../../components/viz/ChartCard';
 import { axisFormatterBob, BAR_MAX, chartChrome, compactBob, horizontalBars } from '../../components/viz/chartDefaults';
 import { useDateRange } from '../../components/viz/RangePicker';
@@ -306,6 +307,7 @@ function SessionsTab() {
                 <Text size="sm">Arqueo: {Object.entries(d.denominations).sort((a, b) => Number(b[0]) - Number(a[0])).map(([v, q]) => `${q} × Bs ${v.replace('.', ',')}`).join(' · ')}</Text>
               )}
               {d.notes && <Text size="sm">Observaciones: {d.notes}</Text>}
+              <ReceiptButton type="caja" id={d.id} label={d.closedAt ? 'Imprimir cierre' : 'Imprimir estado de caja'} />
             </Stack>
           )}
         </QueryState>

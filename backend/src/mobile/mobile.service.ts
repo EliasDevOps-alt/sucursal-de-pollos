@@ -8,11 +8,13 @@ import { PERMISSIONS } from '../auth/permissions';
 import { CollectionsService } from '../collections/collections.service';
 import { CratesService } from '../crates/crates.service';
 import { RoutesService } from '../logistics/routes.service';
+import { ReceiptsService } from '../receipts/receipts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CustomerAddressAddPayload,
   CollectionCreatePayload,
   CratePickupPayload,
+  ReceiptPrintPayload,
   CustomerCreatePayload,
   DeliveryCompletePayload,
   DeliveryFailPayload,
@@ -49,6 +51,7 @@ export class MobileService {
     private readonly audit: AuditService,
     private readonly routes: RoutesService,
     private readonly collections: CollectionsService,
+    private readonly receipts: ReceiptsService,
     private readonly crates: CratesService,
   ) {}
 
@@ -124,6 +127,7 @@ export class MobileService {
 
     return {
       serverTime: new Date().toISOString(),
+      company: await this.receipts.company(),
       products: products.map((p) => {
         const s = stockByProduct.get(p.id);
         return {
@@ -556,6 +560,13 @@ export class MobileService {
           actorId: user.id,
         });
         return { entityType: 'crate_movement', entityId: mv.id, reference: null };
+      }
+
+      case 'RECEIPT_PRINT': {
+        need('sync.push');
+        const p = await parsePayload(ReceiptPrintPayload, op.payload);
+        const r = await this.asOperation(() => this.receipts.print(p.documentType, p.documentId, 'BLUETOOTH', user, { tx, at: new Date(op.createdAtDevice) }));
+        return { entityType: 'receipt_print', entityId: r.documentId, reference: r.number };
       }
 
       case 'GPS_POSITION': {

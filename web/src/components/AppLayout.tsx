@@ -14,6 +14,7 @@ import {
   IconLogout,
   IconPackage,
   IconReceipt2,
+  IconPrinter,
   IconShoppingCart,
   IconTruckDelivery,
   IconRoute,
@@ -36,6 +37,7 @@ const NAV = [
   { to: '/compras', label: 'Compras', icon: IconShoppingCart, permission: 'purchases.view' },
   { to: '/inventario', label: 'Inventario', icon: IconBuildingWarehouse, permission: 'inventory.view' },
   { to: '/reportes', label: 'Reportes', icon: IconChartBar, permission: 'reports.financial' },
+  { to: '/comprobantes', label: 'Comprobantes', icon: IconPrinter, permission: 'sales.view' },
   { to: '/productos', label: 'Productos', icon: IconPackage, permission: 'catalog.view' },
   { to: '/proveedores', label: 'Proveedores', icon: IconTruckDelivery, permission: 'catalog.view' },
 ];

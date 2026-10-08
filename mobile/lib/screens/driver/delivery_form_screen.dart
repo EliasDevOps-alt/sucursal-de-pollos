@@ -8,6 +8,7 @@ import '../counter_field.dart';
 import '../format.dart';
 import 'signature_pad.dart';
 import 'stop_screen.dart' show paymentLabels;
+import '../printing/receipt_screen.dart';
 
 const differenceReasons = ['Peso real al entregar', 'El cliente pidió menos', 'Producto dañado', 'Faltó en el vehículo'];
 
@@ -109,9 +110,12 @@ class _DeliveryFormScreenState extends State<DeliveryFormScreen> {
         cratesPickedUp: _cratesIn,
       );
       if (!mounted) return;
-      Navigator.pop(context); // formulario
-      Navigator.pop(context); // detalle de la parada → vuelve a la lista
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Entrega a ${_stop.customerName} registrada')));
+      // El detalle de la parada se reemplaza por el comprobante, listo para imprimir; al volver se ve la lista.
+      final route = s.routes.firstWhere((r) => r.id == widget.routeId);
+      final stop = route.stops.firstWhere((x) => x.id == widget.stopId);
+      Navigator.pop(context); // formulario
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => ReceiptScreen(load: (s) => s.deliveryReceipt(route, stop))));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo registrar: $e')));
       setState(() => _saving = false);

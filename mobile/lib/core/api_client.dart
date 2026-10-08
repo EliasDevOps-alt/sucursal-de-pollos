@@ -63,6 +63,10 @@ class ApiClient {
   Future<Map<String, dynamic>> bootstrap() async =>
       Map<String, dynamic>.from(await _send(() => _http.get(_uri('/mobile/bootstrap'), headers: _headers)) as Map);
 
+  /// Comprobante armado por el servidor (entrega o cobro ya sincronizados).
+  Future<Map<String, dynamic>> receipt(String slug, String id) async =>
+      Map<String, dynamic>.from(await _send(() => _http.get(_uri('/receipts/$slug/$id'), headers: _headers)) as Map);
+
   Future<Map<String, dynamic>> sync(String deviceUuid, String appVersion, List<Map<String, dynamic>> operations) async {
     final data = await _send(() => _http.post(_uri('/mobile/sync'),
         headers: _headers, body: jsonEncode({'deviceUuid': deviceUuid, 'appVersion': appVersion, 'operations': operations})));

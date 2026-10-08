@@ -182,3 +182,11 @@ export const EXPENSE_TYPE_LABELS: Record<string, string> = {
 
 /** Billetes y monedas en bolivianos, para el arqueo de caja. */
 export const BOB_DENOMINATIONS = ['200', '100', '50', '20', '10', '5', '2', '1', '0.5', '0.2', '0.1'];
+
+export const RECEIPT_TYPES: Record<string, { label: string; slug: 'venta' | 'entrega' | 'cobro' | 'rendicion' | 'caja' }> = {
+  SALE: { label: 'Venta', slug: 'venta' },
+  DELIVERY: { label: 'Entrega', slug: 'entrega' },
+  COLLECTION: { label: 'Cobro', slug: 'cobro' },
+  SETTLEMENT: { label: 'Rendición', slug: 'rendicion' },
+  CASH_SESSION: { label: 'Cierre de caja', slug: 'caja' },
+};

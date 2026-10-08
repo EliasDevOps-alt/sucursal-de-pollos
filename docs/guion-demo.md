@@ -86,6 +86,12 @@ Los datos de demostración dejan una ruta **en curso** de hoy, con la mitad de l
 4. **Cerrar caja** en la Caja Central: arqueo por billetes; si no cuadra, pide el motivo. **Aperturas y cierres** muestra el historial con las diferencias.
 5. **Compras**: una compra a crédito del proveedor aparece *Por pagar*; **Pagar** la registra como egreso del banco.
 
+## 4e. Comprobantes e impresión (4 min) — `admin` + teléfono
+1. **Ventas → una venta → Nota de venta**: se abre el ticket de 80 mm (se puede pasar a 58 mm). **Imprimir** lo manda a la térmica o a PDF; la segunda vez sale «COPIA 1».
+2. En el teléfono del **cobrador**: cobrar a un cliente y firmar; al guardar aparece el **recibo** listo para imprimir por Bluetooth (con el modo avión también: sale como provisorio). **Estado y cuenta → Impresora** para elegir la térmica vinculada y probarla.
+3. **Comprobantes** (panel): cada impresión con original o copia, quién la hizo y si fue por la web o por Bluetooth; **Ver / reimprimir**.
+4. **Catálogos → Datos del negocio**: cambiar el teléfono y mostrar que el siguiente comprobante ya lo trae.
+
 ## 5. Reportes y trazabilidad (5 min) — `admin`
 
 1. **Reportes → Rentabilidad**: por producto, **por lote** (qué compra dejó más margen), por cliente y por vendedor. Botón **Tabla** para ver cifras exactas.

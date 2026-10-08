@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'api_client.dart';
 import 'local_db.dart';
 import 'models.dart';
@@ -114,6 +115,7 @@ class SyncEngine {
   /// salvo los pedidos y clientes que aún esperan en la cola.
   Future<void> _pull() async {
     final data = await api.bootstrap();
+    if (data['company'] is Map) await db.setValue('company', jsonEncode(data['company']));
     await db.replaceCatalog(
       products: (data['products'] as List).map((j) => Product.fromJson(Map<String, dynamic>.from(j as Map))).toList(),
       customers: (data['customers'] as List).map((j) => Customer.fromJson(Map<String, dynamic>.from(j as Map))).toList(),

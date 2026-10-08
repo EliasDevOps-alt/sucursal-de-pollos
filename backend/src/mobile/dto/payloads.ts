@@ -289,3 +289,12 @@ export async function parsePayload<T extends object>(cls: new () => T, payload: 
   }
   return instance;
 }
+
+/** Comprobante impreso por Bluetooth desde la app (entrega o cobro). */
+export class ReceiptPrintPayload {
+  @IsIn(['entrega', 'cobro'])
+  documentType: 'entrega' | 'cobro';
+
+  @IsUUID()
+  documentId: string;
+}

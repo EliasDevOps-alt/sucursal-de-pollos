@@ -98,6 +98,7 @@ const TIME_COLUMNS: [string, string[]][] = [
   ['cash_movements', ['created_at']],
   ['cash_sessions', ['opened_at', 'closed_at']],
   ['settlements', ['created_at']],
+  ['receipt_prints', ['printed_at']],
 ];
 
 /** Mueve lo creado desde `realStart` a la ventana [windowStart, windowEnd], conservando el orden relativo. */
@@ -177,7 +178,7 @@ async function main() {
 
   // ── 1. Limpieza ──────────────────────────────────────────
   console.log('Limpiando operaciones…');
-  await prisma.$executeRawUnsafe(`TRUNCATE cash_movements, cash_sessions, settlements, crate_movements, crate_balances, route_stop_items, route_stops, delivery_routes, vehicles,
+  await prisma.$executeRawUnsafe(`TRUNCATE receipt_prints, cash_movements, cash_sessions, settlements, crate_movements, crate_balances, route_stop_items, route_stops, delivery_routes, vehicles,
     sale_return_items, sale_returns, transfer_items, transfers, inventory_adjustments,
     presale_items, presales, sale_lot_allocations, sale_items, payments, receivable_movements,
     sales, inventory_movements, inventory_balances, lot_prices, lots, reception_items, receptions, purchase_items, purchases,
@@ -450,6 +451,8 @@ async function main() {
   const money: any = await api('GET', '/cash/summary', await login('admin', 'Admin123!'));
   console.log(`  Efectivo en cajas: Bs ${Number(money.cashOnHand).toFixed(2)} · Banco: Bs ${Number(money.inBank).toFixed(2)} · Por rendir: Bs ${(Number(money.pendingSettlement.cash) + Number(money.pendingSettlement.digital)).toFixed(2)} · Por pagar a proveedores: Bs ${Number(money.supplierPayables.amount).toFixed(2)}`);
   console.log(`  ${stats.routes} rutas de entrega · ${stats.failedStops} paradas no entregadas · ${stats.collections} cobros en la calle`);
+  const prints = await prisma.receiptPrint.groupBy({ by: ['channel'], _count: true });
+  console.log(`  Comprobantes impresos: ${prints.map((p) => `${p._count} por ${p.channel === 'WEB' ? 'el panel' : 'Bluetooth'}`).join(' · ')}`);
   console.log(`  Líneas omitidas por falta de stock: ${stats.skippedLines}`);
   for (const e of stats.events) console.log(`  · ${e}`);
 }
@@ -471,15 +474,17 @@ async function sell(token: string, o: { customer: any | null; items: { productId
     if (r < 0.35) paidAmount = 0;
     else if (r < 0.5) paidAmount = r2(total * 0.5);
   }
+  let sale: any;
   try {
-    await api('POST', '/sales', token, { ...base, paidAmount });
+    sale = await api('POST', '/sales', token, { ...base, paidAmount });
     if (paidAmount !== undefined) stats.credit++;
   } catch (e) {
     // Límite de crédito superado: se cobra al contado (sin autorización especial).
-    if (e instanceof ApiError && e.status === 403 && paidAmount !== undefined) await api('POST', '/sales', token, base);
+    if (e instanceof ApiError && e.status === 403 && paidAmount !== undefined) sale = await api('POST', '/sales', token, base);
     else throw e;
   }
   stats.sales++;
+  await printReceipt(token, 'venta', sale.id, 0.6);
 }
 
 let _wh: string | undefined;
@@ -709,8 +714,12 @@ async function runRoute(o: { admin: string; driver: string; driverId: string; ve
         cratesPickedUp: Math.min(customerCrates.get(stop.customer.id) ?? 0, int(0, 4)),
       });
     }
-    const results: any[] = (await api<any>('POST', '/mobile/sync', o.driver, { deviceUuid: 'demo-chofer-android', appVersion: '0.2.0', operations: [...gps, delivery] })).results;
-    const last = results[results.length - 1];
+    // El chofer imprime el comprobante por Bluetooth casi siempre (a veces el cliente pide una copia).
+    const prints = delivery.operationType === 'DELIVERY_COMPLETE' && rand() < 0.85
+      ? Array.from({ length: rand() < 0.1 ? 2 : 1 }, () => op('RECEIPT_PRINT', { documentType: 'entrega', documentId: stop.id }))
+      : [];
+    const results: any[] = (await api<any>('POST', '/mobile/sync', o.driver, { deviceUuid: 'demo-chofer-android', appVersion: '0.4.0', operations: [...gps, delivery, ...prints] })).results;
+    const last = results.find((r) => r.deviceOperationId === delivery.deviceOperationId);
     if (last.status !== 'SYNCED') {
       // Rechazada (p. ej. excede el crédito sin autorización): Administración la registra como no entregada.
       await api('POST', `/routes/stops/${stop.id}/fail`, o.admin, { problemType: 'NO_PAYMENT', notes: `No se pudo registrar: ${last.error}` });
@@ -761,6 +770,7 @@ async function closeCash(token: string, accountId: string) {
   const short = rand() < 0.15;
   const counted = short ? r2(Math.max(0, balance - between(0.5, 15))) : balance;
   await api('POST', `/cash/sessions/${a.sessions[0].id}/close`, token, { countedAmount: counted, notes: short ? 'Faltante de cambio en el arqueo' : undefined });
+  await printReceipt(token, 'caja', a.sessions[0].id, 0.8);
 }
 
 /** Combustible de los vehículos que salieron, servicios y sueldos (sábado), alquiler (primer día del mes). */
@@ -793,8 +803,16 @@ async function settleAll(token: string, caja: string) {
     const expected = Number(p.cash);
     const short = expected > 50 && rand() < 0.12;
     const counted = short ? r2(expected - between(2, 20)) : expected;
-    await api('POST', '/cash/settlements', token, { userId: p.user.id, cashAccountId: caja, countedCash: counted, notes: short ? 'Faltó cambio; se descontará' : undefined });
+    const st: any = await api('POST', '/cash/settlements', token, { userId: p.user.id, cashAccountId: caja, countedCash: counted, notes: short ? 'Faltó cambio; se descontará' : undefined });
+    await printReceipt(token, 'rendicion', st.id, 0.9);
   }
+}
+
+/** Comprobante impreso desde el panel (térmica de mostrador); a veces se reimprime una copia. */
+async function printReceipt(token: string, type: string, id: string, probability: number) {
+  if (rand() >= probability) return;
+  await api('POST', `/receipts/${type}/${id}/print`, token, { channel: 'WEB' });
+  if (rand() < 0.05) await api('POST', `/receipts/${type}/${id}/print`, token, { channel: 'WEB' });
 }
 
 /** El efectivo que sobra se deposita en el banco (queda un fondo para el día siguiente). */
@@ -840,12 +858,14 @@ async function collectorRound(collector: string, isToday: boolean, admin: string
       ...(rand() < 0.4 ? { referenceNumber: `QR-${int(100000, 999999)}` } : {}),
       paidByName: pick(RECEIVERS), signature: signaturePng(), cratesPickedUp: crates || undefined, ...at,
     }));
+    if (rand() < 0.9) ops.push(op('RECEIPT_PRINT', { documentType: 'cobro', documentId: id }));
     if (crates) customerCrates.set(c.id, held - crates);
   }
   // Los vacíos que el cobrador recoge los entrega en el central al terminar la ronda.
   if (ops.length) {
-    const res: any = await api('POST', '/mobile/sync', collector, { deviceUuid: 'demo-cobrador-android', appVersion: '0.3.0', operations: ops });
-    stats.collections += res.results.filter((r: any) => r.status === 'SYNCED' && r.reference).length;
+    const res: any = await api('POST', '/mobile/sync', collector, { deviceUuid: 'demo-cobrador-android', appVersion: '0.4.0', operations: ops });
+    const collectionOps = new Set(ops.filter((o) => o.operationType === 'COLLECTION_CREATE').map((o) => o.deviceOperationId));
+    stats.collections += res.results.filter((r: any) => r.status === 'SYNCED' && collectionOps.has(r.deviceOperationId)).length;
   }
   const picked = ops.filter((o) => o.operationType === 'COLLECTION_CREATE').reduce((t, o) => t + (o.payload.cratesPickedUp ?? 0), 0);
   if (picked > 0 && !isToday) {

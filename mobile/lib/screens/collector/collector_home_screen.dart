@@ -7,6 +7,7 @@ import '../format.dart';
 import '../home_screen.dart' show SyncBanner;
 import '../sync_screen.dart';
 import 'collect_screen.dart';
+import '../printing/receipt_screen.dart';
 
 const methodLabels = {'EFECTIVO': 'Efectivo', 'QR': 'QR', 'TRANSFERENCIA': 'Transferencia'};
 
@@ -184,6 +185,9 @@ class _MyCollectionsTab extends StatelessWidget {
           if (s.collections.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Todavía no hay cobros.'))),
           for (final c in s.collections)
             ListTile(
+              onTap: c.syncState == SyncState.error
+                  ? null
+                  : () => Navigator.push(context, MaterialPageRoute(builder: (_) => ReceiptScreen(load: (s) => s.collectionReceipt(c)))),
               leading: Icon(
                 c.syncState == SyncState.error ? Icons.error_outline : c.syncState == SyncState.pending ? Icons.cloud_upload_outlined : Icons.receipt_outlined,
                 color: c.syncState == SyncState.error ? Theme.of(context).colorScheme.error : c.syncState == SyncState.pending ? Colors.orange.shade800 : null,

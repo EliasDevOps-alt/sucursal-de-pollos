@@ -871,3 +871,45 @@ export interface SettlementRow {
   cashAccount: { name: string };
   payments?: PendingSettlement['payments'];
 }
+
+// ── Comprobantes (fase L) ──────────────────────────────────
+
+export type ReceiptSlug = 'venta' | 'entrega' | 'cobro' | 'rendicion' | 'caja';
+
+export interface CompanyInfo {
+  name: string;
+  nit: string;
+  address: string;
+  phone: string;
+  footer: string;
+}
+
+export interface Receipt {
+  type: 'SALE' | 'DELIVERY' | 'COLLECTION' | 'SETTLEMENT' | 'CASH_SESSION';
+  documentId: string;
+  number: string;
+  title: string;
+  issuedAt: string;
+  company: CompanyInfo;
+  meta: { label: string; value: string }[];
+  items: { description: string; detail?: string; amount?: string }[];
+  totals: { label: string; value: string; strong?: boolean }[];
+  extra: { label: string; value: string }[];
+  signature?: string | null;
+  signatureLabel?: string;
+  notice?: string;
+  footer: string;
+  printCount: number;
+  copyNumber?: number;
+}
+
+export interface ReceiptPrintRow {
+  id: string;
+  documentType: Receipt['type'];
+  documentId: string;
+  documentNumber: string;
+  copyNumber: number;
+  channel: 'WEB' | 'BLUETOOTH';
+  printedAt: string;
+  printedBy: { fullName: string };
+}

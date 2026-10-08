@@ -64,6 +64,9 @@ async function seedOrganization() {
     { code: 'BANCO', name: 'Cuenta bancaria (QR y transferencias)', type: 'BANK' as const, branchId: null },
   ];
   for (const a of accounts) await prisma.cashAccount.upsert({ where: { code: a.code }, update: {}, create: a });
+  // Datos del negocio para los recibos (se editan en Administración).
+  const settings = { 'company.name': 'Distribuidora de Pollos', 'company.nit': '', 'company.address': 'Av. Principal #100, Santa Cruz', 'company.phone': '', 'receipt.footer': 'Gracias por su compra' };
+  for (const [key, value] of Object.entries(settings)) await prisma.appSetting.upsert({ where: { key }, update: {}, create: { key, value } });
   return { central, branch1 };
 }
 

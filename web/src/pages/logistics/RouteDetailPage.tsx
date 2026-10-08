@@ -29,6 +29,7 @@ import { api } from '../../api/client';
 import type { LotBalance, RouteDetail, RouteStop } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/PageHeader';
+import { ReceiptButton } from '../../components/ReceiptButton';
 import { QueryState } from '../../components/QueryState';
 import { StatTile } from '../../components/viz/StatTile';
 import { DELIVERY_PROBLEMS, fmtBob, fmtDate, fmtDateTime, fmtKg, PAYMENT_LABELS, ROUTE_STATUS, STOP_STATUS } from '../../lib/format';
@@ -493,6 +494,7 @@ function ReceiptModal({ stop: s, onClose }: { stop: RouteStop | null; onClose: (
               Ver dónde se registró
             </Anchor>
           )}
+          {s.status !== 'PENDING' && <ReceiptButton type="entrega" id={s.id} />}
         </Stack>
       )}
     </Modal>

@@ -3,7 +3,7 @@ import { IconEdit, IconPlus } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/client';
-import type { Category } from '../../api/types';
+import type { Category, CompanyInfo } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
@@ -145,17 +145,61 @@ function CustomerTypesTab() {
   );
 }
 
+const COMPANY_FIELDS: { key: keyof CompanyInfo; label: string; hint?: string }[] = [
+  { key: 'name', label: 'Nombre comercial' },
+  { key: 'nit', label: 'NIT' },
+  { key: 'address', label: 'Dirección' },
+  { key: 'phone', label: 'Teléfono' },
+  { key: 'footer', label: 'Pie del comprobante', hint: 'Se imprime al final de cada recibo' },
+];
+
+/** Encabezado y pie de los comprobantes (web y app). */
+function CompanyTab() {
+  const qc = useQueryClient();
+  const [form, setForm] = useState<CompanyInfo | null>(null);
+  const { data, isLoading, error } = useQuery({ queryKey: ['settings', 'company'], queryFn: async () => (await api.get<CompanyInfo>('/settings/company')).data });
+  const value = form ?? data;
+  const save = useMutation({
+    mutationFn: async () => api.put<CompanyInfo>('/settings/company', value),
+    onSuccess: (r) => {
+      qc.setQueryData(['settings', 'company'], r.data);
+      setForm(null);
+      notifyOk('Datos del negocio guardados');
+    },
+    onError: notifyError,
+  });
+  return (
+    <QueryState isLoading={isLoading} error={error}>
+      {value && (
+        <Card withBorder maw={560}>
+          <Stack>
+            {COMPANY_FIELDS.map((f) => (
+              <TextInput key={f.key} label={f.label} description={f.hint} value={value[f.key]}
+                onChange={(e) => setForm({ ...value, [f.key]: e.currentTarget.value })} />
+            ))}
+            <Text size="xs" c="dimmed">La app del chofer y del cobrador los recibe al sincronizar.</Text>
+            <Group><Button disabled={!form || !value.name.trim()} loading={save.isPending} onClick={() => save.mutate()}>Guardar</Button></Group>
+          </Stack>
+        </Card>
+      )}
+    </QueryState>
+  );
+}
+
 export function CatalogsAdminPage() {
+  const { can } = useAuth();
   return (
     <>
-      <PageHeader title="Catálogos" subtitle="Categorías de producto y tipos de cliente configurables por Administración" />
+      <PageHeader title="Catálogos" subtitle="Categorías de producto, tipos de cliente y datos del negocio para los comprobantes" />
       <Tabs defaultValue="categories" keepMounted={false}>
         <Tabs.List mb="md">
           <Tabs.Tab value="categories">Categorías de producto</Tabs.Tab>
           <Tabs.Tab value="types">Tipos de cliente</Tabs.Tab>
+          {can('users.manage') && <Tabs.Tab value="company">Datos del negocio</Tabs.Tab>}
         </Tabs.List>
         <Tabs.Panel value="categories"><CategoriesTab /></Tabs.Panel>
         <Tabs.Panel value="types"><CustomerTypesTab /></Tabs.Panel>
+        <Tabs.Panel value="company"><CompanyTab /></Tabs.Panel>
       </Tabs>
       <Text size="xs" c="dimmed" mt="md">Los rangos de cliente (descuento y límite de crédito) se asignan desde la ficha de cada cliente.</Text>
     </>

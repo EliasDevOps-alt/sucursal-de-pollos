@@ -48,6 +48,9 @@ export function useDateRange(initial: Exclude<RangePreset, 'custom'> = '30') {
         </>
       )}
       <SegmentedControl
+        size="sm"
+        // En el teléfono las cinco opciones no entran: se achican en vez de desbordar la página.
+        styles={{ root: { maxWidth: '100%' }, label: { paddingInline: 'clamp(4px, 1.6vw, 12px)' } }}
         value={preset}
         onChange={(v) => {
           // Al pasar a "Personalizado" se parte del rango que se estaba viendo.

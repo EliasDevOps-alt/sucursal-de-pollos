@@ -7,6 +7,7 @@ import { api } from '../../api/client';
 import type { SaleDetail } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/PageHeader';
+import { ReceiptButton } from '../../components/ReceiptButton';
 import { QueryState } from '../../components/QueryState';
 import { fmtBob, fmtDate, fmtDateTime, fmtKg, fmtPct, fmtPerKg, PAYMENT_LABELS, PAYMENT_STATUS, SALE_STATUS } from '../../lib/format';
 import { notifyError, notifyOk } from '../../lib/notify';
@@ -62,6 +63,7 @@ export function SaleDetailPage() {
               <>
                 <Badge size="lg" variant="light" color={SALE_STATUS[s.status].color}>{SALE_STATUS[s.status].label}</Badge>
                 <Badge size="lg" variant="light" color={PAYMENT_STATUS[s.paymentStatus].color}>{PAYMENT_STATUS[s.paymentStatus].label}</Badge>
+                <ReceiptButton type="venta" id={s.id} label="Nota de venta" />
                 {s.status === 'CONFIRMED' && can('sales.create') && (
                   <Button variant="light" leftSection={<IconArrowBackUp size={16} />} onClick={() => setReturnOpen(true)}>Devolución</Button>
                 )}

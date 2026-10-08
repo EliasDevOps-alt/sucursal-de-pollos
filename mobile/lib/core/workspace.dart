@@ -359,9 +359,24 @@ class Workspace {
     ));
   }
 
+  /// Deja constancia de un comprobante impreso por Bluetooth (se registra en el servidor al sincronizar).
+  Future<void> logPrint(String slug, String documentId) => db.enqueue(OutboxOp(
+        id: _uuid.v4(),
+        type: 'RECEIPT_PRINT',
+        createdAt: DateTime.now(),
+        payload: {'documentType': slug, 'documentId': documentId},
+      ));
+
   /// Descarta una operación que el servidor rechazó (queda la decisión al usuario).
   Future<void> discard(OutboxOp op) async {
     await db.removeOp(op.id);
+    // Sin el documento, sus impresiones pendientes tampoco tienen a qué asociarse.
+    final docId = op.type == 'COLLECTION_CREATE' ? op.payload['id'] : op.type == 'DELIVERY_COMPLETE' || op.type == 'DELIVERY_FAIL' ? op.payload['stopId'] : null;
+    if (docId != null) {
+      for (final o in await db.outbox()) {
+        if (o.type == 'RECEIPT_PRINT' && o.payload['documentId'] == docId) await db.removeOp(o.id);
+      }
+    }
     if (op.type == 'COLLECTION_CREATE') await db.deleteCollection(op.payload['id'] as String);
     if (op.type == 'DELIVERY_COMPLETE' || op.type == 'DELIVERY_FAIL') {
       // La parada vuelve a pendiente en el teléfono para registrarla de nuevo.

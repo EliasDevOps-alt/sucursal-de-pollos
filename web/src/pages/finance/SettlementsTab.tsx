@@ -6,6 +6,7 @@ import { api } from '../../api/client';
 import type { CashAccountRow, PendingSettlement, SettlementRow } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { QueryState } from '../../components/QueryState';
+import { ReceiptButton } from '../../components/ReceiptButton';
 import { fmtBob, fmtDateTime, PAYMENT_LABELS } from '../../lib/format';
 import { notifyError, notifyOk } from '../../lib/notify';
 import { INVALIDATE_CASH } from './CashModals';
@@ -102,6 +103,7 @@ function SettlementModal({ id, onClose }: { id: string | null; onClose: () => vo
             </SimpleGrid>
             {s.notes && <Text size="sm">Observaciones: {s.notes}</Text>}
             {s.payments && <PaymentsTable payments={s.payments} />}
+            <ReceiptButton type="rendicion" id={s.id} label="Imprimir rendición" />
           </Stack>
         )}
       </QueryState>

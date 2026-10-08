@@ -9,6 +9,7 @@ import '../counter_field.dart';
 import '../driver/signature_pad.dart';
 import '../format.dart';
 import 'collector_home_screen.dart' show methodLabels;
+import '../printing/receipt_screen.dart';
 
 /// Cobro a un cliente: monto, método, canastillos que devuelve, quién paga y su firma.
 class CollectScreen extends StatefulWidget {
@@ -59,8 +60,9 @@ class _CollectScreenState extends State<CollectScreen> {
     try {
       final png = await _signature.toPngDataUrl();
       final location = await s.location.current(timeout: const Duration(seconds: 8));
+      Collection? done;
       if (_value > 0) {
-        await s.collect(c,
+        done = await s.collect(c,
             amount: _value,
             paymentMethod: _method,
             referenceNumber: _reference.text,
@@ -73,7 +75,13 @@ class _CollectScreenState extends State<CollectScreen> {
         await s.pickupCrates(c, _crates, notes: _notes.text, location: location);
       }
       if (!mounted) return;
-      Navigator.pop(context);
+      final collection = done;
+      if (collection != null) {
+        // Recibo listo para imprimir y entregar al cliente.
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => ReceiptScreen(load: (s) => s.collectionReceipt(collection))));
+      } else {
+        Navigator.pop(context);
+      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(_value > 0 ? 'Cobro de ${fmtBob(_value)} a ${c.name} registrado' : '$_crates canastillos recogidos de ${c.name}')));
     } catch (e) {

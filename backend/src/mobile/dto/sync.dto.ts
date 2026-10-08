@@ -14,6 +14,7 @@ export const OPERATION_TYPES = [
   'DELIVERY_FAIL',
   'COLLECTION_CREATE',
   'CRATE_PICKUP',
+  'RECEIPT_PRINT',
 ] as const;
 export type OperationType = (typeof OPERATION_TYPES)[number];
 

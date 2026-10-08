@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
 import 'format.dart';
+import 'printing/printer_settings_screen.dart';
 
 /// Estado de la sincronización, cola de salida y cuenta.
 class SyncScreen extends StatelessWidget {
@@ -30,6 +31,15 @@ class SyncScreen extends StatelessWidget {
             title: Text(s.online ? 'Con conexión' : 'Sin conexión'),
             subtitle: Text('Última sincronización: ${s.lastSyncAt == null ? 'nunca' : fmtDateTime(s.lastSyncAt!)}'),
           ),
+          if (s.isDriver || s.isCollector)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.print_outlined),
+              title: const Text('Impresora'),
+              subtitle: Text(s.printer.configured ? '${s.printer.device!.name} · ${s.printer.paper.mm} mm' : 'Sin elegir'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrinterSettingsScreen())),
+            ),
           if (s.lastSyncError != null) Text(s.lastSyncError!, style: TextStyle(color: cs.error)),
           const SizedBox(height: 8),
           FilledButton.icon(

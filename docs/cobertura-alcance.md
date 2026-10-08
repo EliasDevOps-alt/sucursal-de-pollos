@@ -10,17 +10,17 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 |---|---|---|
 | 6.1 Compras y abastecimiento | ✅ 8 de 8 | El pago de la compra es egreso de caja o banco; a crédito del proveedor queda por pagar |
 | 6.2 Inventario y almacenes | ✅ 10 de 10 | Transferencias con peso recibido, ajustes por conteo, bajas y kardex completo |
-| 6.3 Ventas | 🟡 9 de 11 | Faltan recibos imprimibles, venta por canastillo e impresión térmica |
+| 6.3 Ventas | 🟡 10 de 11 | Nota de venta imprimible (térmica 80/58 mm o PDF); falta la venta por canastillo |
 | 6.4 Preventas | ✅ 8 de 8 | Incluye edición de pedidos, direcciones adicionales, visitas y mapa de recorrido |
-| 6.5 Logística y distribución | 🟡 10 de 12 | Vehículos, rutas, hoja de carga, entregas offline con firma y GPS sí; faltan impresión térmica y reimpresión del recibo (fase L) |
+| 6.5 Logística y distribución | ✅ 12 de 12 | Vehículos, rutas, hoja de carga, entregas offline con firma y GPS, comprobante impreso por Bluetooth y reimpresión |
 | 6.6 Cobranza y crédito | ✅ 10 de 10 | Cobros en oficina y en la calle (app del cobrador offline), mapa, recibo con firma, canastillos y rendición |
 | 6.7 Canastillos | ✅ 7 de 7 | Saldos por tenedor, entregas y recojos en rutas y cobros, faltantes a cargo, bajas con sanción y trazabilidad |
 | 6.8 Finanzas operativas | ✅ 11 de 11 | Cajas y banco, ingresos y egresos automáticos y manuales, apertura y cierre con arqueo, rendiciones con diferencias |
 | 6.9 Dashboard y reportes | 🟡 | Hechos los de ventas, stock, merma, rentabilidad y cuentas por cobrar; faltan dinero, logística, canastillos y sucursales |
-| §8 Apps móviles | 🟡 1 de 3 | Hecha la del preventista; faltan chofer y cobrador |
-| §11 Recibos e impresión | ❌ | Pendiente |
+| §8 Apps móviles | ✅ 3 de 3 | Preventista, chofer y cobrador en una sola app por rol, offline, con impresión Bluetooth |
+| §11 Recibos e impresión | ✅ | Venta, entrega, cobro, rendición y cierre de caja; térmica 80/58 mm desde la web y por Bluetooth desde la app; firma en el papel; historial y reimpresión con copias numeradas |
 
-**Estimación de avance del MVP: ~45 %.** Lo construido es el núcleo (lotes, costo real, ventas FEFO, crédito, preventa offline, reportes), que es la parte con más reglas de negocio. Lo que falta son módulos enteros: logística, cobranza en ruta, canastillos, caja e impresión.
+**Estimación de avance del MVP: ~90 %.** Están todos los módulos operativos (compras, inventario, ventas, preventa, logística, cobranza, canastillos, finanzas e impresión). Falta la fase de cierre: dashboard y reportes de dinero, logística, canastillos y sucursales, filtros completos, puesta en producción y capacitación.
 
 ## Detalle
 
@@ -51,12 +51,12 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Ventas en sucursales con el stock transferido
 - ✅ Clientes registrados y ventas rápidas
 - 🟡 Venta por kilogramo y despiece (como productos) sí; por canastillo no
-- ❌ Recibos/notas de venta (documento imprimible)
+- ✅ Nota de venta imprimible (con forma de pago, saldo del cliente y marca de ANULADA si corresponde)
 - ✅ Descuentos automáticos por rango
 - ✅ Ventas a crédito cuando están habilitadas
 - ✅ Pagos completos y parciales al vender; anticipos (saldo a favor) desde Cobranza
 - ✅ Devoluciones autorizadas (permiso o credenciales de supervisor), parciales o totales: lo sano reingresa al mismo lote, lo descartado es pérdida; se descuenta de la deuda o se devuelve en efectivo; reportes netos de devoluciones
-- ❌ Impresión térmica de 80 mm
+- ✅ Impresión térmica de 80 mm (o 58 mm) desde el navegador, o PDF con «Guardar como PDF»
 
 ### 6.4 Preventas (app del preventista)
 - ✅ Registro móvil de pedidos
@@ -74,7 +74,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Hoja de carga/despacho imprimible; la carga se transfiere al vehículo y el sobrante vuelve pesado al liquidar
 - ✅ Seguimiento GPS del chofer (cada ~3 min con la ruta en curso) y mapa de la ruta con paradas por estado
 - ✅ Entregas con peso real y motivo obligatorio de cada diferencia; no entregas con motivo (cerrado, rechazo, sin dinero…); el pedido no entregado vuelve a pendiente
-- ✅ Firma digital y comprobante digital de la entrega (web); ❌ impresión térmica y reimpresión (fase L)
+- ✅ Firma digital y comprobante de entrega: el chofer lo imprime por Bluetooth en el momento (aun sin señal) y se reimprime desde la web o la app
 - ✅ App del chofer offline: misma app con modo de entregas según el rol, cola idempotente, navegación y llamada al cliente
 
 ### 6.6 Cobranza y crédito
@@ -85,7 +85,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Un solo método de pago por operación
 - ✅ Actualización automática del saldo
 - ✅ Mapa de clientes pendientes (deuda por antigüedad y canastillos por recoger) en la web; en la app, lista por monto o por días con navegación
-- ✅ Firma y recibo de cobranza: número de recibo del servidor, quién pagó, firma, lugar y hora del teléfono (impresión en la fase L)
+- ✅ Firma y recibo de cobranza: número de recibo del servidor, quién pagó, firma, lugar y hora del teléfono; impreso por Bluetooth en la calle
 - ✅ Control de canastillos recogidos por el cobrador y el chofer
 - ✅ App del cobrador offline y rendición del dinero en caja
 
@@ -129,14 +129,18 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Offline de preventas, entregas y cobranzas
 - ✅ Conflictos: quedan en REVIEW con su motivo, el teléfono los muestra y Administración los resuelve en la web
 
-### 11. Recibos e impresión — pendiente completo
-- ❌ Impresoras térmicas de 80 mm; recibos de venta, entrega y cobranza; firma incorporada; almacenamiento, consulta y reimpresión
+### 11. Recibos e impresión
+- ✅ Comprobantes de venta, entrega (o constancia de visita fallida), cobro, rendición y cierre de caja, con el encabezado del negocio (nombre, NIT, dirección, teléfono y pie, editables en Catálogos)
+- ✅ Impresoras térmicas de 80 y 58 mm: desde la web (ticket con `@page` al ancho del papel, o PDF) y desde la app por Bluetooth (ESC/POS, tildes en CP850)
+- ✅ Firma del cliente impresa en el papel (imagen de trama recortada al trazo)
+- ✅ Sin señal la app arma el comprobante con lo del teléfono (marcado provisorio) y lo imprime; sincronizado, lo pide al servidor
+- ✅ Cada impresión queda registrada (original y copias numeradas, quién, cuándo y por dónde); historial en «Comprobantes» con reimpresión
 
 ## Base de datos (documento de diseño)
 
-Implementadas 50 tablas de las ~60 del documento: seguridad y auditoría, organización con vehículos, productos y precios por lote, compras/recepción/lotes, inventario (movimientos, saldos, transferencias y ajustes), clientes y direcciones, ventas con asignación por lote y devoluciones, preventas y visitas, pagos y movimientos de deuda, rutas de entrega con paradas y productos entregados, canastillos (saldos y movimientos), cuentas de dinero, sesiones de caja, movimientos y rendiciones, dispositivos, sincronización y GPS.
+Implementadas 52 tablas de las ~60 del documento: seguridad y auditoría, organización con vehículos, productos y precios por lote, compras/recepción/lotes, inventario (movimientos, saldos, transferencias y ajustes), clientes y direcciones, ventas con asignación por lote y devoluciones, preventas y visitas, pagos y movimientos de deuda, rutas de entrega con paradas y productos entregados, canastillos (saldos y movimientos), cuentas de dinero, sesiones de caja, movimientos y rendiciones, impresiones de comprobantes, configuración del negocio, dispositivos, sincronización y GPS.
 
-Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la recepción), `customer_rank_history` (hoy en auditoría), `receivable_accounts` (integrada en `customers`), `sale_payments` (integrada en `payments`), recibos imprimibles.
+Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la recepción), `customer_rank_history` (hoy en auditoría), `receivable_accounts` (integrada en `customers`), `sale_payments` (integrada en `payments`). Los recibos no se guardan como archivo: se arman de los datos y se registra cada impresión (`receipt_prints`).
 
 ## Plan para completar el MVP
 
@@ -147,7 +151,7 @@ Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la r
 | I. Logística + app del chofer ✅ | Vehículos, rutas manuales (bloqueadas al iniciar), hoja de despacho, entregas offline con diferencias y problemas, firma digital, seguimiento GPS | 2,5–3 semanas |
 | J. Cobranza + app del cobrador + canastillos ✅ | Cobros offline, mapa de pendientes, recibo y firma, canastillos por cantidad y responsable, bajas y sanciones | 2–2,5 semanas |
 | K. Finanzas operativas ✅ | Cuentas de caja, movimientos automáticos (ventas, cobros, compras), egresos, rendiciones, cierres con diferencias | 1,5 semanas |
-| L. Recibos e impresión | Recibos PDF de venta, entrega y cobranza; impresión térmica 80 mm (web y Bluetooth desde la app); reimpresión | 1 semana |
+| L. Recibos e impresión ✅ | Recibos PDF de venta, entrega y cobranza; impresión térmica 80 mm (web y Bluetooth desde la app); reimpresión | 1 semana |
 | M. Cierre | Reportes y dashboard faltantes, filtros completos, pruebas, puesta en producción y capacitación | 1–1,5 semanas |
 
 \*Una persona a tiempo completo con apoyo de IA. **Total estimado: 10–13 semanas** para el MVP completo.

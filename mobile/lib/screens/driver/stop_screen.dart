@@ -7,6 +7,7 @@ import '../../state/app_state.dart';
 import '../format.dart';
 import 'delivery_form_screen.dart';
 import 'driver_home_screen.dart' show stopBadge;
+import '../printing/receipt_screen.dart';
 
 const problemLabels = {
   'CLOSED': 'Local cerrado',
@@ -130,6 +131,15 @@ class StopScreen extends StatelessWidget {
             ],
           ],
           const SizedBox(height: 16),
+          if (!stop.isPending) ...[
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ReceiptScreen(load: (s) => s.deliveryReceipt(route, stop)))),
+              icon: const Icon(Icons.print_outlined),
+              label: Text(stop.status == 'FAILED' ? 'Constancia de visita' : 'Comprobante de entrega'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            ),
+            const SizedBox(height: 8),
+          ],
           if (canRegister) ...[
             FilledButton.icon(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DeliveryFormScreen(routeId: routeId, stopId: stopId))),

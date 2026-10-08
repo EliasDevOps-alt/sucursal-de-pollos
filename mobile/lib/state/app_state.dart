@@ -11,19 +11,25 @@ import '../core/location_service.dart';
 import '../core/models.dart';
 import '../core/sync_engine.dart';
 import '../core/workspace.dart';
+import '../printing/escpos.dart';
+import '../printing/printer_service.dart';
+import '../printing/receipt_doc.dart';
 
 /// URL por defecto del servidor. Se fija al compilar:
 ///   flutter build apk --dart-define=API_URL=http://192.168.1.25:3000/api
 /// Sin ese parámetro apunta al emulador de Android (que ve la PC como 10.0.2.2).
 /// En la pantalla de ingreso, "Servidor" permite cambiarla.
 const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3000/api');
-const appVersion = '0.3.0';
+const appVersion = '0.4.0';
 
 class AppState extends ChangeNotifier {
-  AppState({required this.db, LocationService? location}) : location = location ?? LocationService();
+  AppState({required this.db, LocationService? location, PrinterService? printer})
+      : location = location ?? LocationService(),
+        printer = printer ?? PrinterService();
 
   final LocalDb db;
   final LocationService location;
+  final PrinterService printer;
   late final Workspace workspace = Workspace(db);
   late ApiClient api;
 
@@ -39,6 +45,7 @@ class AppState extends ChangeNotifier {
   List<OutboxOp> outbox = [];
   List<DeliveryRoute> routes = [];
   List<Collection> collections = [];
+  CompanyInfo company = const CompanyInfo();
 
   bool online = true;
   bool syncing = false;
@@ -72,6 +79,11 @@ class AppState extends ChangeNotifier {
       user = SessionUser.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
       _startBackground();
     }
+    try {
+      await printer.load();
+    } catch (_) {
+      // sin preferencias guardadas: se elige la impresora al imprimir
+    }
     final last = await db.getValue('lastSyncAt');
     lastSyncAt = last == null ? null : DateTime.parse(last).toLocal();
     await reload();
@@ -85,6 +97,8 @@ class AppState extends ChangeNotifier {
     outbox = await db.outbox();
     routes = await db.routes();
     collections = await db.collections();
+    final companyJson = await db.getValue('company');
+    company = companyJson == null ? const CompanyInfo() : CompanyInfo.fromJson(jsonDecode(companyJson) as Map<String, dynamic>);
     notifyListeners();
   }
 
@@ -302,6 +316,74 @@ class AppState extends ChangeNotifier {
     await workspace.pickupCrates(customer, quantity, notes: notes, location: location);
     await reload();
     unawaited(sync());
+  }
+
+  // ── Comprobantes ────────────────────────────────────────
+
+  /// Firma guardada en la cola (las ya enviadas no quedan en el teléfono: se piden al servidor).
+  String? _queuedSignature(String type, String key, String id) =>
+      outbox.where((o) => o.type == type && o.payload[key] == id).firstOrNull?.payload['signature'] as String?;
+
+  /// Comprobante de una entrega: el del servidor si ya se sincronizó y hay señal; si no, el armado en el teléfono.
+  Future<ReceiptDoc> deliveryReceipt(DeliveryRoute route, RouteStop stop) async {
+    if (stop.syncState == SyncState.synced && !stop.isPending) {
+      try {
+        return ReceiptDoc.fromServer('entrega', await api.receipt('entrega', stop.id));
+      } on OfflineException {
+        // sin señal: se arma con lo que hay en el teléfono
+      } on ApiException {
+        // p. ej. la entrega se anuló en oficina: se muestra lo del teléfono
+      }
+    }
+    final queued = outbox.where((o) => (o.type == 'DELIVERY_COMPLETE' || o.type == 'DELIVERY_FAIL') && o.payload['stopId'] == stop.id).firstOrNull;
+    return ReceiptDoc.delivery(
+      route: route,
+      stop: stop,
+      company: company,
+      driverName: user?.fullName ?? '',
+      at: queued?.createdAt,
+      signature: _queuedSignature('DELIVERY_COMPLETE', 'stopId', stop.id),
+    );
+  }
+
+  Future<ReceiptDoc> collectionReceipt(Collection c) async {
+    if (c.syncState == SyncState.synced) {
+      try {
+        return ReceiptDoc.fromServer('cobro', await api.receipt('cobro', c.id));
+      } on OfflineException {
+        // sin señal
+      } on ApiException {
+        // se arma con lo del teléfono
+      }
+    }
+    final op = outbox.where((o) => o.type == 'COLLECTION_CREATE' && o.payload['id'] == c.id).firstOrNull;
+    final customer = customers.where((x) => x.id == c.customerId).firstOrNull;
+    return ReceiptDoc.collection(
+      c: c,
+      company: company,
+      collectorName: user?.fullName ?? '',
+      customerDocument: customer?.documentId,
+      // La deuda del teléfono ya tiene descontado este cobro mientras no se vuelva a sincronizar.
+      debtAfter: op != null ? customer?.currentDebt : null,
+      referenceNumber: op?.payload['referenceNumber'] as String?,
+      notes: op?.payload['notes'] as String?,
+      signature: op?.payload['signature'] as String?,
+    );
+  }
+
+  /// Veces que se imprimió el documento en este teléfono (la primera es el original).
+  Future<int> printCount(ReceiptDoc r) async => int.tryParse(await db.getValue('prints:${r.slug}:${r.documentId}') ?? '') ?? 0;
+
+  /// Imprime por Bluetooth y deja la constancia en la cola. Devuelve la leyenda impresa (ORIGINAL o COPIA n).
+  Future<String> printReceipt(ReceiptDoc r) async {
+    final count = await printCount(r);
+    final label = count == 0 ? 'ORIGINAL' : 'COPIA $count';
+    await printer.print(encodeReceipt(r, printer.paper, copyLabel: label));
+    await db.setValue('prints:${r.slug}:${r.documentId}', '${count + 1}');
+    await workspace.logPrint(r.slug, r.documentId);
+    await reload();
+    unawaited(sync());
+    return label;
   }
 
   Future<void> discard(OutboxOp op) async {

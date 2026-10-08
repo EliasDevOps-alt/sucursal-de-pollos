@@ -82,7 +82,8 @@ void main() {
     expect(after1.currentDebt, closeTo(debt0 - 20, 0.01), reason: 'la deuda se ve descontada en el teléfono');
     expect(after1.cratesHeld, 1);
     await ws.pickupCrates(after1, 1, notes: 'Vacío');
-    expect((await db.outbox()).map((o) => o.type), ['GPS_POSITION', 'COLLECTION_CREATE', 'CRATE_PICKUP']);
+    await ws.logPrint('cobro', c1.id); // recibo impreso por Bluetooth sin señal
+    expect((await db.outbox()).map((o) => o.type), ['GPS_POSITION', 'COLLECTION_CREATE', 'CRATE_PICKUP', 'RECEIPT_PRINT']);
     await expectLater(SyncEngine(db: db, api: offline, deviceUuid: device).run(), throwsA(isA<OfflineException>()));
     expect((await db.collection(c1.id))!.syncState, SyncState.pending);
 
@@ -102,5 +103,16 @@ void main() {
     final receipt = await call('GET', '/collections/${c1.id}', admin);
     expect(receipt['signature'], _png);
     expect(receipt['paymentSource'], 'COLLECTOR');
+
+    // ── La impresión quedó registrada una sola vez y el recibo se puede reimprimir desde el servidor ──
+    final prints = (await call('GET', '/receipts/prints?type=COLLECTION', admin) as List).where((p) => p['documentId'] == c1.id).toList();
+    expect(prints, hasLength(1));
+    expect(prints.single['channel'], 'BLUETOOTH');
+    expect(prints.single['copyNumber'], 0);
+    expect(prints.single['documentNumber'], synced.receiptNumber);
+    final mineReceipt = await online.receipt('cobro', c1.id);
+    expect(mineReceipt['number'], synced.receiptNumber);
+    expect(mineReceipt['signature'], _png);
+    expect(mineReceipt['printCount'], 1);
   });
 }

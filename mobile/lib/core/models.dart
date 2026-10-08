@@ -346,6 +346,7 @@ class OutboxOp {
         'DELIVERY_FAIL' => 'Entrega no realizada',
         'COLLECTION_CREATE' => 'Cobro de ${payload['amount']} Bs',
         'CRATE_PICKUP' => 'Canastillos recogidos: ${payload['quantity']}',
+        'RECEIPT_PRINT' => 'Comprobante impreso',
         _ => type,
       };
 }

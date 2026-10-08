@@ -28,6 +28,8 @@ import { ProductsPage } from './pages/ProductsPage';
 import { PurchaseDetailPage } from './pages/purchases/PurchaseDetailPage';
 import { PurchaseNewPage } from './pages/purchases/PurchaseNewPage';
 import { PurchasesPage } from './pages/purchases/PurchasesPage';
+import { ReceiptPrintPage } from './pages/receipts/ReceiptPrintPage';
+import { ReceiptsLogPage } from './pages/receipts/ReceiptsLogPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SaleDetailPage } from './pages/sales/SaleDetailPage';
 import { SaleNewPage } from './pages/sales/SaleNewPage';
@@ -57,6 +59,7 @@ export function App() {
   return (
     <Routes>
       <Route path="logistica/:id/hoja" element={<LoadSheetPage />} />
+      <Route path="comprobante/:type/:id" element={<ReceiptPrintPage />} />
       <Route element={<AppLayout />}>
         <Route index element={<DashboardPage />} />
         <Route path="compras" element={<PurchasesPage />} />
@@ -81,6 +84,7 @@ export function App() {
         <Route path="lotes" element={<LotsPage />} />
         <Route path="lotes/:id" element={<LotDetailPage />} />
         <Route path="reportes" element={<ReportsPage />} />
+        <Route path="comprobantes" element={<ReceiptsLogPage />} />
         <Route path="productos" element={<ProductsPage />} />
         <Route path="proveedores" element={<SuppliersPage />} />
         <Route path="admin/usuarios" element={<UsersAdminPage />} />

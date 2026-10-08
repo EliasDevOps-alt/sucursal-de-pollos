@@ -9,6 +9,7 @@ import { CollectionsModule } from './collections/collections.module';
 import { CommonModule } from './common/common.module';
 import { CratesModule } from './crates/crates.module';
 import { FinanceModule } from './finance/finance.module';
+import { ReceiptsModule } from './receipts/receipts.module';
 import { CustomersModule } from './customers/customers.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
@@ -34,6 +35,7 @@ import { UsersModule } from './users/users.module';
     InventoryModule,
     CratesModule,
     FinanceModule,
+    ReceiptsModule,
     AuthModule,
     UsersModule,
     CatalogModule,

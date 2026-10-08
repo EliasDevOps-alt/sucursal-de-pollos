@@ -1,0 +1,30 @@
+/* Ticket térmico: siempre negro sobre blanco, sin depender del tema. */
+.receipt-page { min-height: 100vh; background: #e9ecef; padding-bottom: 24px; }
+.ticket {
+  background: #fff; color: #000; margin: 0 auto; padding: 4mm 3mm; box-sizing: border-box;
+  font-family: 'Courier New', ui-monospace, monospace; font-size: 12px; line-height: 1.35;
+  font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+.w80 .ticket { width: 80mm; }
+.w58 .ticket { width: 58mm; font-size: 10.5px; }
+.ticket hr { border: 0; border-top: 1px dashed #000; margin: 4px 0; }
+.t-center { text-align: center; }
+.t-strong { font-weight: 700; }
+.t-big { font-size: 1.15em; }
+.t-small { font-size: 0.9em; }
+.t-nowrap { white-space: nowrap; }
+.t-notice { margin-top: 2px; }
+.t-row { display: flex; justify-content: space-between; gap: 6px; }
+.t-right { text-align: right; overflow-wrap: anywhere; }
+.t-item { margin-bottom: 3px; }
+.t-sign { margin-top: 10px; text-align: center; }
+.t-sign img { max-width: 100%; max-height: 28mm; }
+.t-sign-space { height: 16mm; }
+.t-sign-line { border-top: 1px solid #000; margin: 0 6mm; padding-top: 2px; font-size: 0.9em; }
+.t-footer { margin-top: 8px; }
+
+@media print {
+  .no-print { display: none !important; }
+  .receipt-page { background: #fff; padding: 0; min-height: 0; }
+  .ticket { box-shadow: none; margin: 0; }
+}
