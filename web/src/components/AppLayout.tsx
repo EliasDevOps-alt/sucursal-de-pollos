@@ -18,6 +18,7 @@ import {
   IconTruckDelivery,
   IconRoute,
   IconBox,
+  IconBuildingBank,
   IconUsers,
 } from '@tabler/icons-react';
 import { NavLink as RouterLink, Outlet, useLocation } from 'react-router-dom';
@@ -31,6 +32,7 @@ const NAV = [
   { to: '/cobranza', label: 'Cobranza', icon: IconReceipt2, permission: 'collections.view' },
   { to: '/logistica', label: 'Logística', icon: IconRoute, permission: 'routes.view' },
   { to: '/canastillos', label: 'Canastillos', icon: IconBox, permission: 'crates.view' },
+  { to: '/finanzas', label: 'Finanzas', icon: IconBuildingBank, permission: 'cash.view' },
   { to: '/compras', label: 'Compras', icon: IconShoppingCart, permission: 'purchases.view' },
   { to: '/inventario', label: 'Inventario', icon: IconBuildingWarehouse, permission: 'inventory.view' },
   { to: '/reportes', label: 'Reportes', icon: IconChartBar, permission: 'reports.financial' },

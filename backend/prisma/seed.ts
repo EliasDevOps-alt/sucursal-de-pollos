@@ -57,6 +57,13 @@ async function seedOrganization() {
     create: { code: 'ALM-SUC1', name: 'Almacén Sucursal Mercado Norte', type: WarehouseType.BRANCH, branchId: branch1.id },
   });
 
+  // Cuentas de dinero: una caja de efectivo por sucursal y la cuenta bancaria (QR y transferencias).
+  const accounts = [
+    { code: 'CAJA-CEN', name: 'Caja Central', type: 'CASH' as const, branchId: central.id },
+    { code: 'CAJA-SUC1', name: 'Caja Sucursal Mercado Norte', type: 'CASH' as const, branchId: branch1.id },
+    { code: 'BANCO', name: 'Cuenta bancaria (QR y transferencias)', type: 'BANK' as const, branchId: null },
+  ];
+  for (const a of accounts) await prisma.cashAccount.upsert({ where: { code: a.code }, update: {}, create: a });
   return { central, branch1 };
 }
 
@@ -151,6 +158,8 @@ async function seedCatalogs() {
     { name: 'adjustment', prefix: 'AJ-' },
     { name: 'return', prefix: 'DV-' },
     { name: 'route', prefix: 'RT-' },
+    { name: 'cash_session', prefix: 'CJ-' },
+    { name: 'settlement', prefix: 'RD-' },
   ];
   for (const s of sequences) {
     await prisma.documentSequence.upsert({ where: { name: s.name }, update: {}, create: s });

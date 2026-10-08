@@ -95,6 +95,9 @@ const TIME_COLUMNS: [string, string[]][] = [
   ['route_stops', ['resolved_at_device', 'resolved_at']],
   ['vehicles', ['created_at', 'updated_at']],
   ['crate_movements', ['created_at']],
+  ['cash_movements', ['created_at']],
+  ['cash_sessions', ['opened_at', 'closed_at']],
+  ['settlements', ['created_at']],
 ];
 
 /** Mueve lo creado desde `realStart` a la ventana [windowStart, windowEnd], conservando el orden relativo. */
@@ -174,12 +177,13 @@ async function main() {
 
   // ── 1. Limpieza ──────────────────────────────────────────
   console.log('Limpiando operaciones…');
-  await prisma.$executeRawUnsafe(`TRUNCATE crate_movements, crate_balances, route_stop_items, route_stops, delivery_routes, vehicles,
+  await prisma.$executeRawUnsafe(`TRUNCATE cash_movements, cash_sessions, settlements, crate_movements, crate_balances, route_stop_items, route_stops, delivery_routes, vehicles,
     sale_return_items, sale_returns, transfer_items, transfers, inventory_adjustments,
     presale_items, presales, sale_lot_allocations, sale_items, payments, receivable_movements,
     sales, inventory_movements, inventory_balances, lot_prices, lots, reception_items, receptions, purchase_items, purchases,
     sync_operations, gps_positions, devices, customer_addresses, customers, audit_logs RESTART IDENTITY CASCADE`);
   await prisma.$executeRawUnsafe(`UPDATE document_sequences SET last_value = 0`);
+  await prisma.$executeRawUnsafe(`UPDATE cash_accounts SET balance = 0`);
   // Los almacenes móviles se recrean con los vehículos.
   await prisma.$executeRawUnsafe(`DELETE FROM warehouses WHERE type = 'VEHICLE'`);
   // Usuarios y tipos de cliente creados al probar (no los del seed) se retiran; ya no tienen operaciones asociadas.
@@ -227,6 +231,13 @@ async function main() {
       }),
     );
   }
+  const cashAccounts: any[] = await api('GET', '/cash/accounts', admin);
+  const CAJA = cashAccounts.find((a) => a.code === 'CAJA-CEN')!.id;
+  const CAJA_SUC = cashAccounts.find((a) => a.code === 'CAJA-SUC1')!.id;
+  const BANCO = cashAccounts.find((a) => a.code === 'BANCO')!.id;
+  await api('POST', '/cash/movements', admin, { accountId: CAJA, category: 'OTHER_INCOME', amount: 20000, description: 'Capital inicial en caja' });
+  await api('POST', '/cash/movements', admin, { accountId: BANCO, category: 'OTHER_INCOME', amount: 150000, description: 'Capital inicial en el banco' });
+  await api('POST', '/cash/movements', admin, { accountId: CAJA_SUC, category: 'OTHER_INCOME', amount: 1500, description: 'Fondo de cambio de la sucursal' });
   await backdate(realStart, localTime(addDays(firstDay, -20), 9), localTime(addDays(firstDay, -2), 17));
   const typeOf = (c: any) => c.customerType.name as string;
 
@@ -256,6 +267,11 @@ async function main() {
     const stepStart = new Date();
     const daysAgo = DAYS - 1 - d;
 
+    // Apertura de las cajas (a veces el conteo no coincide por unos bolivianos).
+    await openCash(seller, CAJA);
+    await openCash(branchSeller, CAJA_SUC);
+    if (weekday !== 0) await payCreditPurchases(admin, day);
+
     // Compras y recepción (domingo sin compras).
     if (weekday !== 0) {
       const bySupplier = new Map<string, { productId: string; purchasedWeightKg: number; unitCost: number; purchasedQuantity?: number; code: string }[]>();
@@ -271,7 +287,7 @@ async function main() {
         const purchase: any = await api('POST', '/purchases', admin, {
           supplierId: supplierId(supplierName),
           warehouseId: central.id,
-          paymentMethod: weighted([['EFECTIVO', 5], ['TRANSFERENCIA', 4], ['QR', 1]]),
+          paymentMethod: weighted([['EFECTIVO', 2], ['TRANSFERENCIA', 5], ['QR', 1], ['CREDITO_PROVEEDOR', 2]]),
           items: items.map(({ code: _c, ...i }) => i),
         });
         stats.purchases++;
@@ -388,6 +404,15 @@ async function main() {
       if (!isToday) pendingPresales.push(...keep);
     }
 
+    // Finanzas del día: gastos, rendición del chofer y del cobrador, depósito y cierre de cajas (hoy quedan abiertas).
+    await dailyExpenses(admin, CAJA, BANCO, day, weekday, fleet);
+    if (!isToday) {
+      await settleAll(seller, CAJA);
+      await depositSurplus(admin, CAJA, BANCO);
+      await closeCash(seller, CAJA);
+      await closeCash(branchSeller, CAJA_SUC);
+    }
+
     // Ventana horaria del día simulado.
     const windowStart = localTime(day, 7, 30);
     let windowEnd = localTime(day, 18, 30);
@@ -422,6 +447,8 @@ async function main() {
   console.log(`  ${stats.purchases} compras · ${stats.sales} ventas (${stats.credit} con crédito) · ${stats.presales} preventas (${stats.attended} atendidas, ${pendingNow} pendientes)`);
   console.log(`  Ventas confirmadas: Bs ${Number(revenue).toFixed(2)} · Por cobrar: Bs ${Number(debt).toFixed(2)} · Stock: ${Number(stock).toFixed(1)} kg`);
   console.log(`  ${stats.transfers} transferencias a la sucursal · ${stats.branchSales} ventas en sucursal`);
+  const money: any = await api('GET', '/cash/summary', await login('admin', 'Admin123!'));
+  console.log(`  Efectivo en cajas: Bs ${Number(money.cashOnHand).toFixed(2)} · Banco: Bs ${Number(money.inBank).toFixed(2)} · Por rendir: Bs ${(Number(money.pendingSettlement.cash) + Number(money.pendingSettlement.digital)).toFixed(2)} · Por pagar a proveedores: Bs ${Number(money.supplierPayables.amount).toFixed(2)}`);
   console.log(`  ${stats.routes} rutas de entrega · ${stats.failedStops} paradas no entregadas · ${stats.collections} cobros en la calle`);
   console.log(`  Líneas omitidas por falta de stock: ${stats.skippedLines}`);
   for (const e of stats.events) console.log(`  · ${e}`);
@@ -711,6 +738,76 @@ async function runRoute(o: { admin: string; driver: string; driverId: string; ve
     stats.events.push(`Ruta ${route.routeNumber} en curso: ${upto} de ${stops.length} paradas entregadas (el resto, pendiente para la demo)`);
   }
   return retry;
+}
+
+// ── Finanzas ────────────────────────────────────────────────
+
+async function cashAccount(id: string) {
+  return prisma.cashAccount.findUniqueOrThrow({ where: { id }, include: { sessions: { where: { status: 'OPEN' } } } });
+}
+
+async function openCash(token: string, accountId: string) {
+  const a = await cashAccount(accountId);
+  if (a.sessions.length) return;
+  const balance = Number(a.balance);
+  const counted = rand() < 0.1 ? r2(Math.max(0, balance - int(1, 10))) : balance;
+  await api('POST', '/cash/sessions', token, { accountId, countedAmount: counted, notes: counted !== balance ? 'Faltó cambio al contar' : undefined });
+}
+
+async function closeCash(token: string, accountId: string) {
+  const a = await cashAccount(accountId);
+  if (!a.sessions.length) return;
+  const balance = Number(a.balance);
+  const short = rand() < 0.15;
+  const counted = short ? r2(Math.max(0, balance - between(0.5, 15))) : balance;
+  await api('POST', `/cash/sessions/${a.sessions[0].id}/close`, token, { countedAmount: counted, notes: short ? 'Faltante de cambio en el arqueo' : undefined });
+}
+
+/** Combustible de los vehículos que salieron, servicios y sueldos (sábado), alquiler (primer día del mes). */
+async function dailyExpenses(admin: string, caja: string, banco: string, day: string, weekday: number, fleet: any[]) {
+  if (weekday === 0) return;
+  const routesToday = await prisma.deliveryRoute.count({ where: { routeDate: new Date(`${day}T00:00:00Z`), status: { not: 'CANCELLED' } } });
+  // Del efectivo si alcanza; si no, con la tarjeta del banco.
+  const from = async (amount: number) => (Number((await cashAccount(caja)).balance) >= amount ? caja : banco);
+  for (let i = 0; i < Math.max(1, routesToday); i++) {
+    const amount = r2(between(140, 260));
+    await api('POST', '/cash/movements', admin, { accountId: await from(amount), category: 'EXPENSE', expenseType: 'COMBUSTIBLE', amount, description: `Diésel ${fleet[i % fleet.length].plate}` });
+  }
+  if (rand() < 0.2) {
+    const amount = r2(between(40, 120));
+    await api('POST', '/cash/movements', admin, { accountId: await from(amount), category: 'EXPENSE', expenseType: 'INSUMOS', amount, description: 'Bolsas y hielo' });
+  }
+  if (weekday === 6) {
+    await api('POST', '/cash/movements', admin, { accountId: banco, category: 'EXPENSE', expenseType: 'SUELDOS', amount: 3200, description: 'Sueldos de la semana (4 personas)' });
+  }
+  if (day.endsWith('-01') || day.endsWith('-15')) {
+    await api('POST', '/cash/movements', admin, { accountId: banco, category: 'EXPENSE', expenseType: 'ALQUILER', amount: 1750, description: 'Alquiler del depósito (quincena)' });
+    await api('POST', '/cash/movements', admin, { accountId: banco, category: 'EXPENSE', expenseType: 'SERVICIOS', amount: r2(between(380, 520)), description: 'Luz y agua de la cámara de frío' });
+  }
+}
+
+/** Rendición de choferes y cobradores al terminar el día (a veces falta cambio). */
+async function settleAll(token: string, caja: string) {
+  const pending: any[] = await api('GET', '/cash/settlements/pending', token);
+  for (const p of pending) {
+    const expected = Number(p.cash);
+    const short = expected > 50 && rand() < 0.12;
+    const counted = short ? r2(expected - between(2, 20)) : expected;
+    await api('POST', '/cash/settlements', token, { userId: p.user.id, cashAccountId: caja, countedCash: counted, notes: short ? 'Faltó cambio; se descontará' : undefined });
+  }
+}
+
+/** El efectivo que sobra se deposita en el banco (queda un fondo para el día siguiente). */
+async function depositSurplus(admin: string, caja: string, banco: string) {
+  const a = await cashAccount(caja);
+  const surplus = Math.floor(Number(a.balance) - 12000);
+  if (surplus > 3000) await api('POST', '/cash/transfers', admin, { fromAccountId: caja, toAccountId: banco, amount: surplus, description: 'Depósito del día' });
+}
+
+/** Las compras a crédito del proveedor se pagan por transferencia a los 3 días. */
+async function payCreditPurchases(admin: string, day: string) {
+  const due = await prisma.purchase.findMany({ where: { paidAt: null, status: { not: 'CANCELLED' }, purchaseDate: { lt: new Date(`${addDays(day, -2)}T00:00:00Z`) } } });
+  for (const p of due) await api('POST', `/purchases/${p.id}/pay`, admin, { paymentMethod: 'TRANSFERENCIA' });
 }
 
 // ── Canastillos y cobranza ──────────────────────────────────

@@ -6,6 +6,7 @@ import { D, money } from '../common/decimal';
 import { ReceivablesService } from '../common/receivables.service';
 import { SequenceService } from '../common/sequence.service';
 import { CratesService } from '../crates/crates.service';
+import { CashService } from '../finance/cash.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CollectionFiltersDto, CreateCollectionDto } from './dto/collection.dto';
 
@@ -35,6 +36,7 @@ export class CollectionsService {
     private readonly receivables: ReceivablesService,
     private readonly audit: AuditService,
     private readonly crates: CratesService,
+    private readonly cash: CashService,
   ) {}
 
   findAll(f: CollectionFiltersDto) {
@@ -151,6 +153,7 @@ export class CollectionsService {
       referenceId: payment.id,
       actorId: actor.id,
     });
+    await this.cash.recordPayment(tx, payment, actor.branchId, actor.id, `Cobro ${receiptNumber} de ${customer.name}`);
     if (field?.cratesPickedUp) {
       await this.crates.move(tx, {
         type: CrateMovementType.PICKUP,
@@ -185,6 +188,8 @@ export class CollectionsService {
       if (p.status === PaymentRecordStatus.ANNULLED) throw new ConflictException('El cobro ya está anulado');
       await tx.$queryRaw`SELECT id FROM customers WHERE id = ${p.customer_id}::uuid FOR UPDATE`;
 
+      const payment = await tx.payment.findUniqueOrThrow({ where: { id } });
+      await this.cash.reversePayment(tx, payment, actor.id, `Anulación del cobro ${p.receipt_number}: ${reason}`);
       await tx.payment.update({
         where: { id },
         data: { status: PaymentRecordStatus.ANNULLED, annulledAt: new Date(), annulledById: actor.id, annulReason: reason },

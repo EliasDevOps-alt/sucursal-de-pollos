@@ -63,6 +63,7 @@ export interface PurchaseListItem {
   purchaseNumber: string;
   purchaseDate: string;
   paymentMethod: string;
+  paidAt: string | null;
   totalAmount: Dec;
   status: PurchaseStatus;
   supplier: Ref;
@@ -788,4 +789,85 @@ export interface RouteCandidate {
   items: { productId: string; productName: string; weightKg: Dec }[];
   creditAvailable: Dec;
   creditWouldExceed: boolean;
+}
+
+// ── Finanzas ───────────────────────────────────────────────
+export interface CashSessionRow {
+  id: string;
+  sessionNumber: string;
+  status: 'OPEN' | 'CLOSED';
+  openedAt: string;
+  openingExpected: Dec;
+  openingCounted: Dec;
+  closedAt: string | null;
+  closingExpected: Dec | null;
+  closingCounted: Dec | null;
+  closingDifference: Dec | null;
+  denominations: Record<string, number> | null;
+  notes: string | null;
+  cashAccount: { code: string; name: string };
+  openedBy: { fullName: string };
+  closedBy: { fullName: string } | null;
+}
+export interface CashAccountRow {
+  id: string;
+  code: string;
+  name: string;
+  type: 'CASH' | 'BANK';
+  balance: Dec;
+  branch: { id: string; name: string } | null;
+  openSession: (Omit<CashSessionRow, 'cashAccount' | 'closedBy'> & { openedBy: { fullName: string } }) | null;
+}
+export interface CashMovementRow {
+  id: string;
+  direction: 'IN' | 'OUT';
+  category: string;
+  expenseType: string | null;
+  amount: Dec;
+  balanceAfter: Dec;
+  paymentMethod: string | null;
+  description: string;
+  referenceType: string | null;
+  referenceId: string | null;
+  reversedById: string | null;
+  sessionId: string | null;
+  createdAt: string;
+  cashAccount: { code: string; name: string; type: 'CASH' | 'BANK' };
+  createdBy: { fullName: string };
+}
+export interface CashSummary {
+  accounts: CashAccountRow[];
+  cashOnHand: Dec;
+  inBank: Dec;
+  pendingSettlement: { cash: Dec; digital: Dec; people: number };
+  supplierPayables: { amount: Dec; count: number };
+  period: { from: string; to: string; income: Dec; expense: Dec; rows: { direction: 'IN' | 'OUT'; category: string; expenseType: string | null; amount: Dec; count: number }[] };
+}
+export interface SessionDetail extends CashSessionRow {
+  movements: (CashMovementRow & { cashAccount?: undefined })[];
+  byCategory: { category: string; direction: 'IN' | 'OUT'; amount: Dec; count: number }[];
+  totals: { in: Dec; out: Dec };
+}
+export interface PendingSettlement {
+  user: { id: string; fullName: string; role: string };
+  cash: Dec;
+  digital: Dec;
+  count: number;
+  since: string;
+  payments: { id: string; amount: Dec; paymentMethod: string; paymentDate: string; receiptNumber: string | null; referenceNumber: string | null; customer: { name: string } | null; sale: { saleNumber: string } | null }[];
+}
+export interface SettlementRow {
+  id: string;
+  settlementNumber: string;
+  expectedCash: Dec;
+  countedCash: Dec;
+  cashDifference: Dec;
+  digitalAmount: Dec;
+  paymentsCount: number;
+  notes: string | null;
+  createdAt: string;
+  user: { fullName: string };
+  receivedBy: { fullName: string };
+  cashAccount: { name: string };
+  payments?: PendingSettlement['payments'];
 }

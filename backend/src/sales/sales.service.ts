@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  PaymentRecordStatus,
   CustomerStatus,
   InventoryMovementType,
   PresaleStatus,
@@ -17,6 +18,7 @@ import { PERMISSIONS } from '../auth/permissions';
 import { D, kg, money, perKg, ZERO } from '../common/decimal';
 import { ReceivablesService } from '../common/receivables.service';
 import { SequenceService } from '../common/sequence.service';
+import { CashService } from '../finance/cash.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { availableLots } from '../inventory/lot-stock';
 import { returnInclude } from './returns.service';
@@ -78,6 +80,7 @@ export class SalesService {
     private readonly audit: AuditService,
     private readonly auth: AuthService,
     private readonly receivables: ReceivablesService,
+    private readonly cash: CashService,
   ) {}
 
   // ── Consulta ────────────────────────────────────────────
@@ -268,7 +271,7 @@ export class SalesService {
     }
 
     if (built.paid.gt(0)) {
-      await tx.payment.create({
+      const payment = await tx.payment.create({
         data: {
           customerId: built.customer?.id,
           saleId: sale.id,
@@ -278,6 +281,8 @@ export class SalesService {
           receivedById: actor.id,
         },
       });
+      // En mostrador el dinero entra a la caja (o al banco); lo que cobra el chofer entra al rendirlo.
+      await this.cash.recordPayment(tx, payment, built.warehouse.branchId, actor.id, `Venta ${saleNumber}`);
     }
     if (built.credit.gt(0)) {
       await this.receivable(tx, built.customer!.id, ReceivableMovementType.CHARGE, built.credit, sale.id, actor.id);
@@ -373,6 +378,12 @@ export class SalesService {
       }
       if (sale.customerId && D(sale.creditAmount).gt(0)) {
         await this.receivable(tx, sale.customerId, ReceivableMovementType.ANNUL, D(sale.creditAmount).negated(), sale.id, actor.id, reason);
+      }
+      // Lo cobrado se devuelve: sale de la caja donde entró (o deja de estar pendiente de rendir).
+      const payments = await tx.payment.findMany({ where: { saleId: sale.id, status: PaymentRecordStatus.VALID } });
+      for (const p of payments) {
+        await this.cash.reversePayment(tx, p, actor.id, `Anulación de la venta ${sale.saleNumber}: ${reason}`);
+        await tx.payment.update({ where: { id: p.id }, data: { status: PaymentRecordStatus.ANNULLED, annulledAt: new Date(), annulledById: actor.id, annulReason: reason } });
       }
       await tx.sale.update({
         where: { id },

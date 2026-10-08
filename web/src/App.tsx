@@ -9,6 +9,7 @@ import { SyncIssuesPage } from './pages/admin/SyncIssuesPage';
 import { UsersAdminPage } from './pages/admin/UsersAdminPage';
 import { CollectionsPage } from './pages/collections/CollectionsPage';
 import { CratesPage } from './pages/crates/CratesPage';
+import { FinancePage } from './pages/finance/FinancePage';
 import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
 import { CustomersPage } from './pages/customers/CustomersPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -70,6 +71,7 @@ export function App() {
         <Route path="cobranza" element={<CollectionsPage />} />
         <Route path="logistica" element={<LogisticsPage />} />
         <Route path="canastillos" element={<CratesPage />} />
+        <Route path="finanzas" element={<FinancePage />} />
         <Route path="logistica/nueva" element={<RoutePlanPage />} />
         <Route path="logistica/:id" element={<RouteDetailPage />} />
         <Route path="logistica/:id/editar" element={<RoutePlanPage />} />

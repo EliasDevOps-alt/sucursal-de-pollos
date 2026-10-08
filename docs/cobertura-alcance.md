@@ -8,14 +8,14 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 
 | Módulo (delimitación §6) | Estado | Comentario |
 |---|---|---|
-| 6.1 Compras y abastecimiento | 🟡 7 de 8 | Falta registrar el pago de la compra como egreso de caja |
+| 6.1 Compras y abastecimiento | ✅ 8 de 8 | El pago de la compra es egreso de caja o banco; a crédito del proveedor queda por pagar |
 | 6.2 Inventario y almacenes | ✅ 10 de 10 | Transferencias con peso recibido, ajustes por conteo, bajas y kardex completo |
 | 6.3 Ventas | 🟡 9 de 11 | Faltan recibos imprimibles, venta por canastillo e impresión térmica |
 | 6.4 Preventas | ✅ 8 de 8 | Incluye edición de pedidos, direcciones adicionales, visitas y mapa de recorrido |
 | 6.5 Logística y distribución | 🟡 10 de 12 | Vehículos, rutas, hoja de carga, entregas offline con firma y GPS sí; faltan impresión térmica y reimpresión del recibo (fase L) |
-| 6.6 Cobranza y crédito | 🟡 9 de 10 | Cobros en oficina y en la calle (app del cobrador offline), mapa, recibo con firma y canastillos; falta la rendición del dinero (fase K) |
+| 6.6 Cobranza y crédito | ✅ 10 de 10 | Cobros en oficina y en la calle (app del cobrador offline), mapa, recibo con firma, canastillos y rendición |
 | 6.7 Canastillos | ✅ 7 de 7 | Saldos por tenedor, entregas y recojos en rutas y cobros, faltantes a cargo, bajas con sanción y trazabilidad |
-| 6.8 Finanzas operativas | 🟡 1 de 11 | Solo rentabilidad; falta caja, ingresos/egresos, rendiciones y cierres |
+| 6.8 Finanzas operativas | ✅ 11 de 11 | Cajas y banco, ingresos y egresos automáticos y manuales, apertura y cierre con arqueo, rendiciones con diferencias |
 | 6.9 Dashboard y reportes | 🟡 | Hechos los de ventas, stock, merma, rentabilidad y cuentas por cobrar; faltan dinero, logística, canastillos y sucursales |
 | §8 Apps móviles | 🟡 1 de 3 | Hecha la del preventista; faltan chofer y cobrador |
 | §11 Recibos e impresión | ❌ | Pendiente |
@@ -32,7 +32,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Merma: diferencia entre peso comprado y recibido, con tara de canastillos
 - ✅ Vencimiento por lote
 - ✅ Producto disponible para venta al recibir
-- ❌ Pago de compras como egreso del dinero empresarial (se guarda el método de pago, pero no hay módulo de caja)
+- ✅ Pago de compras como egreso: al contado sale de la caja o del banco al registrarla; a crédito del proveedor queda por pagar hasta que se paga
 
 ### 6.2 Inventario y almacenes
 - ✅ Kardex (por lote y general)
@@ -87,7 +87,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Mapa de clientes pendientes (deuda por antigüedad y canastillos por recoger) en la web; en la app, lista por monto o por días con navegación
 - ✅ Firma y recibo de cobranza: número de recibo del servidor, quién pagó, firma, lugar y hora del teléfono (impresión en la fase L)
 - ✅ Control de canastillos recogidos por el cobrador y el chofer
-- ✅ App del cobrador offline; ❌ rendición del dinero (fase K: caja)
+- ✅ App del cobrador offline y rendición del dinero en caja
 
 ### 6.7 Canastillos
 - ✅ Control por cantidad y por tenedor: almacén central, sucursal, vehículo, cliente y responsable (chofer o cobrador)
@@ -95,13 +95,15 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Bajas con motivo y sanción opcional al cliente (se suma a su deuda); trazabilidad de cada movimiento con quién lo registró
 
 ### 6.8 Finanzas operativas
-- ❌ Dinero inicial, ingresos y egresos, compras como egresos, ventas y cobranzas como ingresos
-- ❌ Rendiciones, control físico y digital, esperado vs. recibido, diferencias, cierre de caja, historial
+- ✅ Cuentas de dinero: caja central, caja de cada sucursal y banco (QR y transferencias), con saldo igual a la suma de sus movimientos
+- ✅ Dinero inicial (aportes), ingresos y egresos: ventas y cobros en mostrador como ingresos, compras y devoluciones como egresos, gastos por tipo (combustible, sueldos, alquiler…), traspasos (depósito al banco)
+- ✅ Apertura y cierre de caja con arqueo por billetes y monedas; esperado vs. contado; la diferencia queda registrada con su motivo
+- ✅ Rendiciones de choferes y cobradores: efectivo esperado vs. contado (control físico) y QR/transferencias confirmados en el banco (control digital); historial
 - ✅ Rentabilidad usando el costo real por lote
 
 ### 6.9 Dashboard y reportes
 - ✅ Dashboard general; ventas, stock y cuentas por cobrar
-- 🟡 Rutas activas, entregas y problemas de entrega en Logística (no en el tablero); ❌ dinero (caja) y diferencias de caja; canastillos pendientes en su propia página
+- 🟡 Rutas activas, entregas y problemas de entrega en Logística (no en el tablero); dinero, por rendir y diferencias de caja en Finanzas; canastillos pendientes en su propia página (falta unificarlos en el tablero, fase M)
 - ✅ Lotes próximos a vencer y alertas de bajo stock
 - ✅ Reportes de ventas, inventario, merma, rentabilidad (por producto, lote, cliente y vendedor) y cobranza (antigüedad)
 - 🟡 Compras y clientes: listados, sin reporte dedicado
@@ -119,7 +121,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 
 ### 8–10. Roles, seguridad y offline
 - ✅ Administrador, Vendedor Central y Preventista operativos
-- ✅ Vendedor Sucursal (recibe transferencias y vende); 🟡 Contador (reportes sí, caja no)
+- ✅ Vendedor Sucursal (recibe transferencias y vende); ✅ Contador (reportes y finanzas en consulta)
 - ✅ Chofer (app de entregas) y Cobrador (app de cobranza)
 - ✅ Permisos por acción y autorización de supervisor con credenciales
 - ✅ Pantallas para administrar usuarios, roles y permisos
@@ -132,9 +134,9 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 
 ## Base de datos (documento de diseño)
 
-Implementadas 46 tablas de las ~60 del documento: seguridad y auditoría, organización con vehículos, productos y precios por lote, compras/recepción/lotes, inventario (movimientos, saldos, transferencias y ajustes), clientes y direcciones, ventas con asignación por lote y devoluciones, preventas y visitas, pagos y movimientos de deuda, rutas de entrega con paradas y productos entregados, canastillos (saldos y movimientos), dispositivos, sincronización y GPS.
+Implementadas 50 tablas de las ~60 del documento: seguridad y auditoría, organización con vehículos, productos y precios por lote, compras/recepción/lotes, inventario (movimientos, saldos, transferencias y ajustes), clientes y direcciones, ventas con asignación por lote y devoluciones, preventas y visitas, pagos y movimientos de deuda, rutas de entrega con paradas y productos entregados, canastillos (saldos y movimientos), cuentas de dinero, sesiones de caja, movimientos y rendiciones, dispositivos, sincronización y GPS.
 
-Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la recepción), `customer_rank_history` (hoy en auditoría), `receivable_accounts` (integrada en `customers`), `sale_payments` (integrada en `payments`), recibos imprimibles, caja, rendiciones y cierres.
+Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la recepción), `customer_rank_history` (hoy en auditoría), `receivable_accounts` (integrada en `customers`), `sale_payments` (integrada en `payments`), recibos imprimibles.
 
 ## Plan para completar el MVP
 
@@ -144,7 +146,7 @@ Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la r
 | H. Inventario operativo ✅ | Transferencias central–sucursal (con peso recibido), ajustes con motivo, bajas y pérdidas, devoluciones autorizadas | 1–1,5 semanas |
 | I. Logística + app del chofer ✅ | Vehículos, rutas manuales (bloqueadas al iniciar), hoja de despacho, entregas offline con diferencias y problemas, firma digital, seguimiento GPS | 2,5–3 semanas |
 | J. Cobranza + app del cobrador + canastillos ✅ | Cobros offline, mapa de pendientes, recibo y firma, canastillos por cantidad y responsable, bajas y sanciones | 2–2,5 semanas |
-| K. Finanzas operativas | Cuentas de caja, movimientos automáticos (ventas, cobros, compras), egresos, rendiciones, cierres con diferencias | 1,5 semanas |
+| K. Finanzas operativas ✅ | Cuentas de caja, movimientos automáticos (ventas, cobros, compras), egresos, rendiciones, cierres con diferencias | 1,5 semanas |
 | L. Recibos e impresión | Recibos PDF de venta, entrega y cobranza; impresión térmica 80 mm (web y Bluetooth desde la app); reimpresión | 1 semana |
 | M. Cierre | Reportes y dashboard faltantes, filtros completos, pruebas, puesta en producción y capacitación | 1–1,5 semanas |
 

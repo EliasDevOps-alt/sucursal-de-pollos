@@ -1,5 +1,5 @@
-import { Alert, Anchor, Badge, Button, Card, Group, Modal, SimpleGrid, Stack, Table, Text, Textarea } from '@mantine/core';
-import { IconArrowLeft, IconBan } from '@tabler/icons-react';
+import { Alert, Anchor, Badge, Button, Card, Group, Modal, SegmentedControl, SimpleGrid, Stack, Table, Text, Textarea } from '@mantine/core';
+import { IconArrowLeft, IconBan, IconCash } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -27,10 +27,23 @@ export function PurchaseDetailPage() {
   const qc = useQueryClient();
   const [annulOpen, setAnnulOpen] = useState(false);
   const [reason, setReason] = useState('');
+  const [paying, setPaying] = useState(false);
+  const [method, setMethod] = useState('TRANSFERENCIA');
 
   const { data: p, isLoading, error } = useQuery({
     queryKey: ['purchases', id],
     queryFn: async () => (await api.get<PurchaseDetail>(`/purchases/${id}`)).data,
+  });
+
+  const pay = useMutation({
+    mutationFn: async () => api.post(`/purchases/${id}/pay`, { paymentMethod: method }),
+    onSuccess: () => {
+      notifyOk('Pago registrado');
+      setPaying(false);
+      qc.invalidateQueries({ queryKey: ['purchases'] });
+      qc.invalidateQueries({ queryKey: ['cash'] });
+    },
+    onError: notifyError,
   });
 
   const annul = useMutation({
@@ -58,6 +71,12 @@ export function PurchaseDetailPage() {
             actions={
               <>
                 <Badge size="lg" variant="light" color={PURCHASE_STATUS[p.status].color}>{PURCHASE_STATUS[p.status].label}</Badge>
+                {p.status !== 'CANCELLED' && (
+                  <Badge size="lg" variant="light" color={p.paidAt ? 'green' : 'orange'}>{p.paidAt ? 'Pagada' : 'Por pagar'}</Badge>
+                )}
+                {!p.paidAt && p.status !== 'CANCELLED' && can('cash.manage') && (
+                  <Button variant="light" leftSection={<IconCash size={16} />} onClick={() => setPaying(true)}>Pagar</Button>
+                )}
                 {p.status === 'REGISTERED' && can('purchases.annul') && (
                   <Button variant="light" color="red" leftSection={<IconBan size={16} />} onClick={() => setAnnulOpen(true)}>
                     Anular
@@ -139,6 +158,14 @@ export function PurchaseDetailPage() {
           )}
 
           {p.status === 'REGISTERED' && can('receptions.create') && <ReceptionForm purchase={p} />}
+
+          <Modal opened={paying} onClose={() => setPaying(false)} title={`Pagar la compra ${p.purchaseNumber}`}>
+            <Stack>
+              <Text size="sm">Se registra el egreso de {fmtBob(p.totalAmount)} a {p.supplier.name}: en efectivo sale de la caja; por QR o transferencia, del banco.</Text>
+              <SegmentedControl value={method} onChange={setMethod} data={[{ value: 'EFECTIVO', label: 'Efectivo' }, { value: 'TRANSFERENCIA', label: 'Transferencia' }, { value: 'QR', label: 'QR' }]} />
+              <Button loading={pay.isPending} onClick={() => pay.mutate()}>Registrar pago</Button>
+            </Stack>
+          </Modal>
 
           <Modal opened={annulOpen} onClose={() => setAnnulOpen(false)} title={`Anular compra ${p.purchaseNumber}`}>
             <Stack>

@@ -74,7 +74,10 @@ export function PurchasesPage() {
                       <Table.Td>{p.supplier.name}</Table.Td>
                       <Table.Td>{p.warehouse.name}</Table.Td>
                       <Table.Td ta="center">{p._count.items}</Table.Td>
-                      <Table.Td>{PAYMENT_LABELS[p.paymentMethod] ?? p.paymentMethod}</Table.Td>
+                      <Table.Td>
+                        {PAYMENT_LABELS[p.paymentMethod] ?? p.paymentMethod}
+                        {!p.paidAt && p.status !== 'CANCELLED' && <Badge ml={6} size="xs" color="orange" variant="light">Por pagar</Badge>}
+                      </Table.Td>
                       <Table.Td ta="right" fw={500}>{fmtBob(p.totalAmount)}</Table.Td>
                       <Table.Td>
                         <Badge variant="light" color={PURCHASE_STATUS[p.status].color}>{PURCHASE_STATUS[p.status].label}</Badge>

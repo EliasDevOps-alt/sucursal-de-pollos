@@ -50,6 +50,10 @@ export const PERMISSIONS = {
   // Canastillos
   CRATES_VIEW: 'crates.view',
   CRATES_MANAGE: 'crates.manage',
+  // Finanzas
+  CASH_VIEW: 'cash.view',
+  CASH_MANAGE: 'cash.manage',
+  SETTLEMENTS_MANAGE: 'settlements.manage',
   // Reportes
   REPORTS_VIEW: 'reports.view',
   REPORTS_FINANCIAL: 'reports.financial',
@@ -96,6 +100,9 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
   'deliveries.register': 'Registrar entregas en ruta',
   'crates.view': 'Ver canastillos por tenedor y sus movimientos',
   'crates.manage': 'Registrar altas, traspasos y bajas de canastillos',
+  'cash.view': 'Ver cajas, cuentas, movimientos de dinero y rendiciones',
+  'cash.manage': 'Abrir y cerrar caja, registrar ingresos, egresos y traspasos',
+  'settlements.manage': 'Recibir rendiciones de choferes y cobradores',
   'reports.view': 'Ver reportes operativos y dashboard',
   'reports.financial': 'Ver reportes de rentabilidad y financieros',
 };
@@ -112,7 +119,7 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
       P.CUSTOMERS_VIEW, P.CUSTOMERS_MANAGE,
       P.SALES_VIEW, P.SALES_CREATE, P.PRESALES_VIEW_ALL,
       P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE, P.ROUTES_VIEW, P.ROUTES_MANAGE,
-      P.CRATES_VIEW, P.CRATES_MANAGE,
+      P.CRATES_VIEW, P.CRATES_MANAGE, P.CASH_VIEW, P.CASH_MANAGE, P.SETTLEMENTS_MANAGE,
     ],
   },
   {
@@ -122,7 +129,7 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
       P.CATALOG_VIEW, P.LOTS_VIEW, P.INVENTORY_VIEW, P.TRANSFERS_RECEIVE,
       P.CUSTOMERS_VIEW, P.CUSTOMERS_MANAGE,
       P.SALES_VIEW, P.SALES_CREATE, P.PRICE_MODIFY,
-      P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE, P.CRATES_VIEW,
+      P.COLLECTIONS_VIEW, P.COLLECTIONS_CREATE, P.CRATES_VIEW, P.CASH_VIEW, P.CASH_MANAGE,
     ],
   },
   {
@@ -140,7 +147,7 @@ export const ROLE_DEFINITIONS: { code: string; name: string; permissions: Permis
     name: 'Contador',
     permissions: [
       P.PURCHASES_VIEW, P.SALES_VIEW, P.INVENTORY_VIEW, P.LOTS_VIEW,
-      P.REPORTS_VIEW, P.REPORTS_FINANCIAL, P.AUDIT_VIEW, P.COLLECTIONS_VIEW, P.ROUTES_VIEW, P.CRATES_VIEW,
+      P.REPORTS_VIEW, P.REPORTS_FINANCIAL, P.AUDIT_VIEW, P.COLLECTIONS_VIEW, P.ROUTES_VIEW, P.CRATES_VIEW, P.CASH_VIEW,
     ],
   },
 ];

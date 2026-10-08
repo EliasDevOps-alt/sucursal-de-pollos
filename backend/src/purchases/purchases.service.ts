@@ -4,6 +4,7 @@ import { InventoryMovementType, Prisma, PurchaseStatus, ShrinkageTreatment } fro
 import { AuditService } from '../audit/audit.service';
 import { D, money, ZERO } from '../common/decimal';
 import { SequenceService } from '../common/sequence.service';
+import { CashService } from '../finance/cash.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePurchaseDto, CreateReceptionDto } from './dto/purchase.dto';
@@ -29,6 +30,7 @@ export class PurchasesService {
     private readonly inventory: InventoryService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
+    private readonly cash: CashService,
   ) {}
 
   findAll(filters: { status?: PurchaseStatus; supplierId?: string }) {
@@ -86,6 +88,10 @@ export class PurchasesService {
           items: { create: items },
         },
       });
+      // Pagada al contado: egreso de la caja o del banco. A crédito del proveedor queda por pagar.
+      if (dto.paymentMethod !== 'CREDITO_PROVEEDOR') {
+        await this.payInTx(tx, created.id, dto.paymentMethod, actorId);
+      }
       await this.audit.log(
         { userId: actorId, action: 'purchases.create', entityType: 'purchase', entityId: created.id, newData: { purchaseNumber, totalAmount: totalAmount.toFixed(2) } },
         tx,
@@ -94,6 +100,37 @@ export class PurchasesService {
     }, TX_OPTIONS);
 
     return this.findOne(purchase.id);
+  }
+
+  /** Paga una compra a crédito del proveedor (egreso de la caja o del banco). */
+  async pay(id: string, paymentMethod: 'EFECTIVO' | 'QR' | 'TRANSFERENCIA', actorId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM purchases WHERE id = ${id}::uuid FOR UPDATE`;
+      await this.payInTx(tx, id, paymentMethod, actorId);
+      await this.audit.log({ userId: actorId, action: 'purchases.pay', entityType: 'purchase', entityId: id, newData: { paymentMethod } }, tx);
+    }, TX_OPTIONS);
+    return this.findOne(id);
+  }
+
+  private async payInTx(tx: Prisma.TransactionClient, id: string, paymentMethod: string, actorId: string) {
+    const purchase = await tx.purchase.findUnique({ where: { id }, include: { supplier: true, warehouse: true } });
+    if (!purchase) throw new NotFoundException('Compra no encontrada');
+    if (purchase.status === PurchaseStatus.CANCELLED) throw new ConflictException('La compra está anulada');
+    if (purchase.paidAt) throw new ConflictException('La compra ya está pagada');
+    const account = await this.cash.accountFor(tx, paymentMethod, purchase.warehouse.branchId);
+    await this.cash.record(tx, {
+      accountId: account.id,
+      direction: 'OUT',
+      category: 'PURCHASE',
+      amount: D(purchase.totalAmount),
+      paymentMethod,
+      description: `Compra ${purchase.purchaseNumber} a ${purchase.supplier.name}`,
+      referenceType: 'purchase',
+      referenceId: purchase.id,
+      actorId,
+      allowNegative: true,
+    });
+    await tx.purchase.update({ where: { id }, data: { paidAt: new Date(), paidById: actorId } });
   }
 
   async annul(id: string, reason: string, actorId: string) {
@@ -109,6 +146,9 @@ export class PurchasesService {
         where: { id },
         data: { status: PurchaseStatus.CANCELLED, annulledAt: new Date(), annulledById: actorId, annulReason: reason },
       });
+      // Si ya se había pagado, el dinero vuelve (el proveedor lo devuelve).
+      const paid = await tx.cashMovement.findFirst({ where: { referenceType: 'purchase', referenceId: id, reversedById: null, category: 'PURCHASE' } });
+      if (paid) await this.cash.reverse(tx, paid.id, actorId, `Anulación de la compra ${purchase.purchaseNumber}: ${reason}`);
       await this.audit.log(
         { userId: actorId, action: 'purchases.annul', entityType: 'purchase', entityId: id, oldData: { status: purchase.status }, newData: { status: PurchaseStatus.CANCELLED }, reason },
         tx,

@@ -185,6 +185,34 @@ enum StopStatus {
   FAILED // no entregado (con motivo)
 }
 
+enum CashAccountType {
+  CASH // efectivo físico (caja central, caja de sucursal)
+  BANK // cuenta bancaria: QR y transferencias
+}
+
+enum CashDirection {
+  IN
+  OUT
+}
+
+enum CashCategory {
+  SALE // venta cobrada en mostrador
+  COLLECTION // cobro de deuda en oficina
+  SETTLEMENT // rendición de un chofer o cobrador
+  PURCHASE // pago de una compra
+  REFUND // devolución de dinero (devolución o anulación de venta)
+  EXPENSE // gasto operativo
+  OTHER_INCOME // aporte, capital, otros ingresos
+  TRANSFER // traspaso entre cuentas (p. ej. depósito del efectivo al banco)
+  ADJUSTMENT // diferencia de arqueo al abrir o cerrar caja
+  REVERSAL // reversión por anulación de un cobro, venta o compra
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
 enum CrateHolderType {
   WAREHOUSE // almacén central, sucursal o vehículo
   CUSTOMER
@@ -304,6 +332,11 @@ model User {
   stopsRecorded        RouteStop[]           @relation("StopRecordedBy")
   stopCreditApprovals  RouteStop[]           @relation("StopCreditAuthorizedBy")
   crateMovements       CrateMovement[]
+  cashMovements        CashMovement[]
+  cashSessionsOpened   CashSession[]         @relation("CashSessionOpenedBy")
+  cashSessionsClosed   CashSession[]         @relation("CashSessionClosedBy")
+  settlementsGiven     Settlement[]          @relation("SettlementUser")
+  settlementsReceived  Settlement[]          @relation("SettlementReceivedBy")
 
   @@map("users")
 }
@@ -352,10 +385,11 @@ model Branch {
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
 
-  warehouses Warehouse[]
-  users      User[]
-  sales      Sale[]
-  lotPrices  LotPrice[]
+  warehouses   Warehouse[]
+  users        User[]
+  sales        Sale[]
+  lotPrices    LotPrice[]
+  cashAccounts CashAccount[]
 
   @@map("branches")
 }
@@ -487,6 +521,8 @@ model Purchase {
   annulledAt     DateTime?      @map("annulled_at")
   annulledById   String?        @map("annulled_by_id") @db.Uuid
   annulReason    String?        @map("annul_reason")
+  paidAt         DateTime?      @map("paid_at") // pagada (al registrarla, o después si fue a crédito del proveedor)
+  paidById       String?        @map("paid_by_id") @db.Uuid
 
   supplier   Supplier       @relation(fields: [supplierId], references: [id])
   warehouse  Warehouse      @relation(fields: [warehouseId], references: [id])
@@ -895,11 +931,13 @@ model Payment {
   longitude         Decimal?            @db.Decimal(10, 7)
   collectedAtDevice DateTime?           @map("collected_at_device")
   deviceOperationId String?             @unique @map("device_operation_id") @db.Uuid
+  settlementId      String?             @map("settlement_id") @db.Uuid // rendición en la que el chofer o cobrador entregó este dinero
 
-  customer   Customer? @relation(fields: [customerId], references: [id])
-  sale       Sale?     @relation(fields: [saleId], references: [id])
-  receivedBy User      @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
-  annulledBy User?     @relation("PaymentAnnulledBy", fields: [annulledById], references: [id])
+  settlement Settlement? @relation(fields: [settlementId], references: [id])
+  customer   Customer?   @relation(fields: [customerId], references: [id])
+  sale       Sale?       @relation(fields: [saleId], references: [id])
+  receivedBy User        @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
+  annulledBy User?       @relation("PaymentAnnulledBy", fields: [annulledById], references: [id])
 
   @@index([customerId, paymentDate])
   @@map("payments")
@@ -1301,4 +1339,108 @@ model CrateMovement {
   @@index([toType, toId])
   @@index([createdAt])
   @@map("crate_movements")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Finanzas operativas: cuentas de dinero, cajas, movimientos y rendiciones
+// ─────────────────────────────────────────────────────────────
+
+model CashAccount {
+  id        String          @id @default(uuid()) @db.Uuid
+  code      String          @unique
+  name      String
+  type      CashAccountType
+  branchId  String?         @map("branch_id") @db.Uuid
+  balance   Decimal         @default(0) @db.Decimal(14, 2) // siempre igual a la suma de sus movimientos
+  isActive  Boolean         @default(true) @map("is_active")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  branch      Branch?        @relation(fields: [branchId], references: [id])
+  movements   CashMovement[]
+  sessions    CashSession[]
+  settlements Settlement[]
+
+  @@map("cash_accounts")
+}
+
+/**
+ * Apertura y cierre de una caja de efectivo, con el arqueo de cada momento.
+ */
+model CashSession {
+  id                String            @id @default(uuid()) @db.Uuid
+  sessionNumber     String            @unique @map("session_number")
+  cashAccountId     String            @map("cash_account_id") @db.Uuid
+  status            CashSessionStatus @default(OPEN)
+  openedById        String            @map("opened_by_id") @db.Uuid
+  openedAt          DateTime          @default(now()) @map("opened_at")
+  openingExpected   Decimal           @map("opening_expected") @db.Decimal(14, 2)
+  openingCounted    Decimal           @map("opening_counted") @db.Decimal(14, 2)
+  closedById        String?           @map("closed_by_id") @db.Uuid
+  closedAt          DateTime?         @map("closed_at")
+  closingExpected   Decimal?          @map("closing_expected") @db.Decimal(14, 2)
+  closingCounted    Decimal?          @map("closing_counted") @db.Decimal(14, 2)
+  closingDifference Decimal?          @map("closing_difference") @db.Decimal(14, 2)
+  denominations     Json? // conteo por billete y moneda
+  notes             String?
+
+  cashAccount CashAccount    @relation(fields: [cashAccountId], references: [id])
+  openedBy    User           @relation("CashSessionOpenedBy", fields: [openedById], references: [id])
+  closedBy    User?          @relation("CashSessionClosedBy", fields: [closedById], references: [id])
+  movements   CashMovement[]
+
+  @@index([cashAccountId, status])
+  @@map("cash_sessions")
+}
+
+model CashMovement {
+  id            String        @id @default(uuid()) @db.Uuid
+  cashAccountId String        @map("cash_account_id") @db.Uuid
+  sessionId     String?       @map("session_id") @db.Uuid
+  direction     CashDirection
+  category      CashCategory
+  expenseType   String?       @map("expense_type") // combustible, sueldos, alquiler…
+  amount        Decimal       @db.Decimal(14, 2) // siempre positivo; el sentido lo da direction
+  balanceAfter  Decimal       @map("balance_after") @db.Decimal(14, 2)
+  paymentMethod String?       @map("payment_method")
+  description   String
+  referenceType String?       @map("reference_type")
+  referenceId   String?       @map("reference_id") @db.Uuid
+  reversedById  String?       @unique @map("reversed_by_id") @db.Uuid // movimiento que lo revirtió
+  createdById   String        @map("created_by_id") @db.Uuid
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  cashAccount CashAccount  @relation(fields: [cashAccountId], references: [id])
+  session     CashSession? @relation(fields: [sessionId], references: [id])
+  createdBy   User         @relation(fields: [createdById], references: [id])
+
+  @@index([cashAccountId, createdAt])
+  @@index([referenceType, referenceId])
+  @@index([category, createdAt])
+  @@map("cash_movements")
+}
+
+/**
+ * Rendición: el chofer o el cobrador entrega lo que cobró; se compara lo esperado con lo contado.
+ */
+model Settlement {
+  id               String   @id @default(uuid()) @db.Uuid
+  settlementNumber String   @unique @map("settlement_number")
+  userId           String   @map("user_id") @db.Uuid
+  cashAccountId    String   @map("cash_account_id") @db.Uuid
+  receivedById     String   @map("received_by_id") @db.Uuid
+  expectedCash     Decimal  @map("expected_cash") @db.Decimal(14, 2)
+  countedCash      Decimal  @map("counted_cash") @db.Decimal(14, 2)
+  cashDifference   Decimal  @map("cash_difference") @db.Decimal(14, 2) // contado − esperado (negativo = faltante)
+  digitalAmount    Decimal  @map("digital_amount") @db.Decimal(14, 2) // QR y transferencias, ya en el banco
+  paymentsCount    Int      @map("payments_count")
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user        User        @relation("SettlementUser", fields: [userId], references: [id])
+  receivedBy  User        @relation("SettlementReceivedBy", fields: [receivedById], references: [id])
+  cashAccount CashAccount @relation(fields: [cashAccountId], references: [id])
+  payments    Payment[]
+
+  @@index([userId, createdAt])
+  @@map("settlements")
 }

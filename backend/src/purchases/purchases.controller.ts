@@ -6,6 +6,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { PERMISSIONS } from '../auth/permissions';
 import { AnnulDto, CreatePurchaseDto, CreateReceptionDto } from './dto/purchase.dto';
+import { PayPurchaseDto } from '../finance/dto/finance.dto';
 import { PurchasesService } from './purchases.service';
 
 @ApiTags('purchases')
@@ -23,6 +24,13 @@ export class PurchasesController {
     @Query('supplierId', new ParseUUIDPipe({ optional: true })) supplierId?: string,
   ) {
     return this.purchases.findAll({ status, supplierId });
+  }
+
+  /** Paga una compra hecha a crédito del proveedor. */
+  @Post(':id/pay')
+  @RequirePermissions(PERMISSIONS.PURCHASES_CREATE, PERMISSIONS.CASH_MANAGE)
+  pay(@Param('id', ParseUUIDPipe) id: string, @Body() dto: PayPurchaseDto, @CurrentUser() user: AuthUser) {
+    return this.purchases.pay(id, dto.paymentMethod, user.id);
   }
 
   @Get(':id')

@@ -154,3 +154,31 @@ export const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   DRIVER: 'Chofer',
   COLLECTOR: 'Cobrador',
 };
+
+export const CASH_CATEGORY_LABELS: Record<string, string> = {
+  SALE: 'Ventas',
+  COLLECTION: 'Cobros en oficina',
+  SETTLEMENT: 'Rendiciones',
+  PURCHASE: 'Compras',
+  REFUND: 'Devoluciones de dinero',
+  EXPENSE: 'Gastos',
+  OTHER_INCOME: 'Otros ingresos',
+  TRANSFER: 'Traspasos',
+  ADJUSTMENT: 'Diferencias de arqueo',
+  REVERSAL: 'Reversiones',
+};
+
+export const EXPENSE_TYPE_LABELS: Record<string, string> = {
+  COMBUSTIBLE: 'Combustible',
+  SUELDOS: 'Sueldos',
+  ALQUILER: 'Alquiler',
+  SERVICIOS: 'Servicios (luz, agua, internet)',
+  MANTENIMIENTO: 'Mantenimiento',
+  VIATICOS: 'Viáticos',
+  IMPUESTOS: 'Impuestos',
+  INSUMOS: 'Insumos',
+  OTROS: 'Otros',
+};
+
+/** Billetes y monedas en bolivianos, para el arqueo de caja. */
+export const BOB_DENOMINATIONS = ['200', '100', '50', '20', '10', '5', '2', '1', '0.5', '0.2', '0.1'];

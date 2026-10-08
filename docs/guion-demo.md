@@ -78,6 +78,14 @@ Los datos de demostración dejan una ruta **en curso** de hoy, con la mitad de l
 4. Quitar el modo avión → el cobro recibe su **número de recibo** (R-…). En la web, **Cobranza → Cobros → ver recibo**: monto, firma, quién pagó y dónde.
 5. **Canastillos**: cuántos hay y quién los tiene (almacenes, vehículo, clientes, chofer y cobrador). En **Movimientos** se ve cada entrega, recojo y faltante con su ruta. Mostrar una **Baja** de canastillos perdidos con **sanción** al cliente: se suma a su deuda.
 
+## 4d. Dinero: cajas, rendiciones y cierre (5 min) — `admin`
+
+1. **Finanzas → Resumen**: efectivo en cajas, banco, **por rendir** (lo que choferes y cobradores tienen en su poder) y **por pagar a proveedores**. Ingresos por origen y egresos por destino del período.
+2. **Rendiciones**: el chofer y el cobrador con lo cobrado hoy. **Recibir rendición**: lista de cobros, efectivo esperado vs. contado; si falta, se exige el motivo y queda registrado. Lo digital pasa al banco.
+3. **Movimientos**: cada venta, cobro, compra, gasto y rendición con el saldo resultante; registrar un **gasto** de combustible y un **traspaso** (depósito al banco).
+4. **Cerrar caja** en la Caja Central: arqueo por billetes; si no cuadra, pide el motivo. **Aperturas y cierres** muestra el historial con las diferencias.
+5. **Compras**: una compra a crédito del proveedor aparece *Por pagar*; **Pagar** la registra como egreso del banco.
+
 ## 5. Reportes y trazabilidad (5 min) — `admin`
 
 1. **Reportes → Rentabilidad**: por producto, **por lote** (qué compra dejó más margen), por cliente y por vendedor. Botón **Tabla** para ver cifras exactas.

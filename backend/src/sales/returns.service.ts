@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { InventoryMovementType, Prisma, ReceivableMovementType, RefundMethod, ReturnDisposition, SaleStatus, WarehouseType } from '@prisma/client';
+import { CashCategory, CashDirection, InventoryMovementType, Prisma, ReceivableMovementType, RefundMethod, ReturnDisposition, SaleStatus, WarehouseType } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { AuthUser } from '../auth/auth-user';
@@ -7,6 +7,7 @@ import { PERMISSIONS } from '../auth/permissions';
 import { D, kg, money, ZERO } from '../common/decimal';
 import { ReceivablesService } from '../common/receivables.service';
 import { SequenceService } from '../common/sequence.service';
+import { CashService } from '../finance/cash.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReturnDto, ReturnFiltersDto } from './dto/return.dto';
@@ -38,6 +39,7 @@ export class ReturnsService {
     private readonly receivables: ReceivablesService,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
+    private readonly cash: CashService,
   ) {}
 
   findAll(f: ReturnFiltersDto) {
@@ -190,6 +192,23 @@ export class ReturnsService {
         where: { id: saleId },
         data: { returnedAmount: money(D(sale.returnedAmount).plus(total)), status: fullyReturned ? SaleStatus.RETURNED : undefined },
       });
+
+      if (refundMethod === RefundMethod.CASH && total.gt(0)) {
+        const branchId = (await tx.warehouse.findUniqueOrThrow({ where: { id: restockWarehouseId } })).branchId;
+        const account = await this.cash.accountFor(tx, 'EFECTIVO', branchId);
+        await this.cash.record(tx, {
+          accountId: account.id,
+          direction: CashDirection.OUT,
+          category: CashCategory.REFUND,
+          amount: total,
+          paymentMethod: 'EFECTIVO',
+          description: `Devolución ${returnNumber} de ${sale.saleNumber}`,
+          referenceType: 'sale_return',
+          referenceId: saleReturn.id,
+          actorId: actor.id,
+          allowNegative: true,
+        });
+      }
 
       if (refundMethod === RefundMethod.CREDIT && total.gt(0)) {
         await tx.$queryRaw`SELECT id FROM customers WHERE id = ${sale.customerId}::uuid FOR UPDATE`;
