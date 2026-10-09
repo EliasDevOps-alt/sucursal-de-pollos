@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Ip, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { AuthUser } from './auth-user';
@@ -14,8 +14,8 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(200)
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.username, dto.password, dto.client);
+  login(@Body() dto: LoginDto, @Ip() ip: string) {
+    return this.auth.login(dto.username, dto.password, dto.client, ip);
   }
 
   @ApiBearerAuth()

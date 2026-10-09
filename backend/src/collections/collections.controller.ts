@@ -6,7 +6,7 @@ import { RequirePermissions } from '../auth/decorators/require-permissions.decor
 import { PERMISSIONS } from '../auth/permissions';
 import { AnnulDto } from '../purchases/dto/purchase.dto';
 import { CollectionsService } from './collections.service';
-import { CollectionFiltersDto, CreateCollectionDto } from './dto/collection.dto';
+import { CollectionFiltersDto, CreateCollectionDto, DebtAdjustmentDto } from './dto/collection.dto';
 
 @ApiTags('collections')
 @ApiBearerAuth()
@@ -37,6 +37,13 @@ export class CollectionsController {
   @RequirePermissions(PERMISSIONS.COLLECTIONS_CREATE)
   create(@Body() dto: CreateCollectionDto, @CurrentUser() user: AuthUser) {
     return this.collections.create(dto, user);
+  }
+
+  /** Saldo inicial o corrección de la deuda de un cliente (sin dinero de por medio). */
+  @Post('adjustments')
+  @RequirePermissions(PERMISSIONS.RECEIVABLES_ADJUST)
+  adjust(@Body() dto: DebtAdjustmentDto, @CurrentUser() user: AuthUser) {
+    return this.collections.adjust(dto, user);
   }
 
   @Post(':id/annul')

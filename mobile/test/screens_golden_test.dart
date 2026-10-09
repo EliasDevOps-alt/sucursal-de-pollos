@@ -99,7 +99,8 @@ Future<AppState> _seed() async {
       {'id': 't2', 'name': 'Mercado'},
     ],
   );
-  final ws = Workspace(db);
+  // Hora fija: lo creado en el teléfono no cambia con el reloj de la máquina que corre la prueba.
+  final ws = Workspace(db, clock: () => DateTime(2026, 10, 6, 10, 5));
   // Un pedido ya atendido, uno enviado, uno rechazado y uno sin enviar.
   final base = DateTime(2026, 10, 6, 9, 30);
   await db.savePresale(Presale(id: 'x1', number: 'P-000012', status: 'DELIVERED', saleNumber: 'V-000031', customerId: 'c1', customerName: 'Pollería Doña Juana',

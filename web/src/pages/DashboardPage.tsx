@@ -8,6 +8,7 @@ import type { Dashboard, LotListItem } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/PageHeader';
 import { QueryState } from '../components/QueryState';
+import { useSalesFilters } from '../components/ReportFilters';
 import { ChartCard } from '../components/viz/ChartCard';
 import { axisFormatterBob, BAR_MAX, chartChrome, compactBob, horizontalBars, surfaceGap } from '../components/viz/chartDefaults';
 import { useDateRange } from '../components/viz/RangePicker';
@@ -25,11 +26,14 @@ function ManagementDashboard() {
   const { user, can } = useAuth();
   const financial = can('reports.financial');
   const { range, picker } = useDateRange('30');
+  const { filters, controls } = useSalesFilters(['branchId', 'categoryId']);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard', range],
-    queryFn: async () => (await api.get<Dashboard>('/reports/dashboard', { params: range })).data,
+    queryKey: ['dashboard', range, filters],
+    queryFn: async () => (await api.get<Dashboard>('/reports/dashboard', { params: { ...range, ...filters } })).data,
+    refetchInterval: 60_000, // la operación del día (rutas, caja) cambia durante la jornada
   });
+  const filtered = Object.keys(filters).length > 0;
 
   const k = data?.kpis;
   const series = (data?.salesByDay ?? []).map((d) => ({
@@ -56,6 +60,11 @@ function ManagementDashboard() {
       <QueryState isLoading={isLoading} error={error}>
         {data && k && (
           <Stack>
+            <TodayStrip today={data.today} />
+            <Group justify="space-between" align="flex-end" wrap="wrap" gap="xs">
+              <Text fw={600}>Ventas del período{filtered ? ' (filtradas)' : ''}</Text>
+              {controls}
+            </Group>
             <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }}>
               <StatTile label="Ventas" value={fmtBob(k.revenue)} delta={k.revenueDeltaPercentage} hint={`${k.salesCount} ventas · ${fmtKgShort(k.kgSold)}`} />
               {financial ? (
@@ -221,6 +230,48 @@ function ManagementDashboard() {
         )}
       </QueryState>
     </>
+  );
+}
+
+/** La operación de hoy: rutas, dinero y canastillos (cada bloque según los permisos del usuario). */
+function TodayStrip({ today }: { today: Dashboard['today'] }) {
+  const { routes, money, crates } = today;
+  if (!routes && !money && !crates) return null;
+  const tiles: React.ReactNode[] = [];
+  if (routes) {
+    tiles.push(
+      <Anchor key="r" component={Link} to="/logistica" underline="never" c="inherit">
+        <StatTile
+          label="Reparto de hoy"
+          value={routes.stops ? `${routes.delivered} de ${routes.stops}` : 'Sin rutas'}
+          hint={routes.stops ? `entregadas · ${routes.pending} pendientes${routes.failed ? ` · ${routes.failed} fallidas` : ''}` : 'no hay rutas para hoy'}
+        />
+      </Anchor>,
+    );
+  }
+  if (money) {
+    const pending = Number(money.pendingSettlement.cash) + Number(money.pendingSettlement.digital);
+    tiles.push(
+      <Anchor key="c" component={Link} to="/finanzas" underline="never" c="inherit">
+        <StatTile label="Efectivo en cajas" value={fmtBob(money.cashOnHand)} hint={`banco ${fmtBob(money.inBank)}`} />
+      </Anchor>,
+      <Anchor key="p" component={Link} to="/finanzas?tab=rendiciones" underline="never" c="inherit">
+        <StatTile label="Por rendir" value={fmtBob(pending)} hint={money.pendingSettlement.people ? `${money.pendingSettlement.people} persona(s) sin rendir` : 'todo rendido'} />
+      </Anchor>,
+    );
+  }
+  if (crates) {
+    tiles.push(
+      <Anchor key="k" component={Link} to="/canastillos" underline="never" c="inherit">
+        <StatTile label="Canastillos con clientes" value={String(crates.withCustomers)} hint={`${crates.customersHolding} clientes${crates.withPeople ? ` · ${crates.withPeople} con el personal` : ''}`} />
+      </Anchor>,
+    );
+  }
+  return (
+    <div>
+      <Text fw={600} mb="xs">Hoy, {fmtDate(today.date)}</Text>
+      <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }}>{tiles}</SimpleGrid>
+    </div>
   );
 }
 

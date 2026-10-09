@@ -5,12 +5,15 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Profitability, ReceivablesReport, ShrinkageReport } from '../api/types';
+import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/PageHeader';
 import { QueryState } from '../components/QueryState';
+import { useSalesFilters } from '../components/ReportFilters';
 import { ChartCard } from '../components/viz/ChartCard';
 import { axisFormatterBob, BAR_MAX, chartChrome, compactBob, horizontalBars } from '../components/viz/chartDefaults';
 import { useDateRange } from '../components/viz/RangePicker';
 import { StatTile } from '../components/viz/StatTile';
+import { BranchesTab, CratesTab, CustomersTab, LogisticsTab, PurchasesTab } from './reports/OperationsReports';
 import { fmtBob, fmtDate, fmtDateTime, fmtKg, fmtPct, LOSS_CAUSES, TREATMENT_LABELS } from '../lib/format';
 
 const GROUP_LABELS = { product: 'Producto', lot: 'Lote', customer: 'Cliente', seller: 'Vendedor' } as const;
@@ -23,9 +26,10 @@ function rowLink(group: Group, id: string | null) {
 
 function ProfitabilityTab({ range }: { range: { from: string; to: string } }) {
   const [group, setGroup] = useState<Group>('product');
+  const { filters, controls } = useSalesFilters();
   const { data, isLoading, error } = useQuery({
-    queryKey: ['profitability', range, group],
-    queryFn: async () => (await api.get<Profitability>('/reports/profitability', { params: { ...range, groupBy: group } })).data,
+    queryKey: ['profitability', range, group, filters],
+    queryFn: async () => (await api.get<Profitability>('/reports/profitability', { params: { ...range, ...filters, groupBy: group } })).data,
   });
 
   // El gráfico muestra los 10 de mayor margen; la tabla, todos.
@@ -42,6 +46,7 @@ function ProfitabilityTab({ range }: { range: { from: string; to: string } }) {
         onChange={(v) => setGroup(v as Group)}
         data={Object.entries(GROUP_LABELS).map(([value, label]) => ({ value, label: `Por ${label.toLowerCase()}` }))}
       />
+      {controls}
       <QueryState isLoading={isLoading} error={error}>
         {data && (
           <>
@@ -383,27 +388,43 @@ function ReceivablesTab() {
   );
 }
 
+const TABS = [
+  { value: 'profitability', label: 'Rentabilidad', perms: ['reports.financial'] },
+  { value: 'branches', label: 'Sucursales', perms: ['reports.financial'] },
+  { value: 'logistics', label: 'Logística', perms: ['reports.view', 'routes.view'] },
+  { value: 'purchases', label: 'Compras', perms: ['reports.financial'] },
+  { value: 'customers', label: 'Clientes', perms: ['reports.financial'] },
+  { value: 'crates', label: 'Canastillos', perms: ['reports.view', 'crates.view'] },
+  { value: 'shrinkage', label: 'Merma', perms: ['reports.financial'] },
+  { value: 'receivables', label: 'Cuentas por cobrar', perms: ['reports.view'] },
+] as const;
+
 export function ReportsPage() {
+  const { can } = useAuth();
   const [params, setParams] = useSearchParams();
+  const tabs = TABS.filter((t) => t.perms.every((p) => can(p)));
   const requested = params.get('tab');
-  // Un valor desconocido o vacío vuelve a la primera pestaña en lugar de dejar la página en blanco.
-  const tab = requested && ['profitability', 'shrinkage', 'receivables'].includes(requested) ? requested : 'profitability';
+  // Un valor desconocido (o sin permiso) vuelve a la primera pestaña en lugar de dejar la página en blanco.
+  const tab = tabs.find((t) => t.value === requested)?.value ?? tabs[0]?.value;
   const { range, picker } = useDateRange('30');
 
   return (
     <>
       <PageHeader
         title="Reportes"
-        subtitle="Rentabilidad con el costo real de cada lote, merma y cuentas por cobrar"
+        subtitle="Ventas y rentabilidad con el costo real de cada lote, sucursales, logística, compras, clientes, canastillos, merma y cobranza"
         actions={tab !== 'receivables' && picker}
       />
       <Tabs value={tab} onChange={(v) => setParams(v ? { tab: v } : {})} keepMounted={false}>
         <Tabs.List mb="md">
-          <Tabs.Tab value="profitability">Rentabilidad</Tabs.Tab>
-          <Tabs.Tab value="shrinkage">Merma</Tabs.Tab>
-          <Tabs.Tab value="receivables">Cuentas por cobrar</Tabs.Tab>
+          {tabs.map((t) => <Tabs.Tab key={t.value} value={t.value}>{t.label}</Tabs.Tab>)}
         </Tabs.List>
         <Tabs.Panel value="profitability"><ProfitabilityTab range={range} /></Tabs.Panel>
+        <Tabs.Panel value="branches"><BranchesTab range={range} /></Tabs.Panel>
+        <Tabs.Panel value="logistics"><LogisticsTab range={range} /></Tabs.Panel>
+        <Tabs.Panel value="purchases"><PurchasesTab range={range} /></Tabs.Panel>
+        <Tabs.Panel value="customers"><CustomersTab range={range} /></Tabs.Panel>
+        <Tabs.Panel value="crates"><CratesTab range={range} /></Tabs.Panel>
         <Tabs.Panel value="shrinkage"><ShrinkageTab range={range} /></Tabs.Panel>
         <Tabs.Panel value="receivables"><ReceivablesTab /></Tabs.Panel>
       </Tabs>

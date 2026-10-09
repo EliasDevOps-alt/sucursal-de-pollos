@@ -1,5 +1,5 @@
 import { Anchor, Badge, Button, Card, Group, Modal, NumberInput, Select, SimpleGrid, Stack, Switch, Table, Text, Textarea, Title } from '@mantine/core';
-import { IconArrowLeft, IconCash, IconEdit } from '@tabler/icons-react';
+import { IconAdjustments, IconArrowLeft, IconCash, IconEdit } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { QueryState } from '../../components/QueryState';
 import { fmtBob, fmtDateTime, fmtPct, PAYMENT_STATUS, RECEIVABLE_LABELS, SALE_STATUS } from '../../lib/format';
 import { notifyError, notifyOk } from '../../lib/notify';
 import { CollectionModal } from '../collections/CollectionModal';
+import { DebtAdjustmentModal } from './DebtAdjustmentModal';
 import { useCustomerCatalogs } from './CustomersPage';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -29,6 +30,7 @@ export function CustomerDetailPage() {
   const { ranks } = useCustomerCatalogs();
   const [editing, setEditing] = useState(false);
   const [collecting, setCollecting] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
   const [rankId, setRankId] = useState<string | null>(null);
   const [creditEnabled, setCreditEnabled] = useState(false);
   const [creditLimit, setCreditLimit] = useState<number | string>(0);
@@ -82,6 +84,9 @@ export function CustomerDetailPage() {
                 )}
                 {can('customer.rank_change') && (
                   <Button variant="light" leftSection={<IconEdit size={16} />} onClick={openEdit}>Rango y crédito</Button>
+                )}
+                {can('receivables.adjust') && (
+                  <Button variant="light" leftSection={<IconAdjustments size={16} />} onClick={() => setAdjusting(true)}>Ajustar deuda</Button>
                 )}
               </>
             }
@@ -207,6 +212,7 @@ export function CustomerDetailPage() {
           </Card>
 
           <CollectionModal opened={collecting} onClose={() => setCollecting(false)} customer={c} />
+          <DebtAdjustmentModal opened={adjusting} onClose={() => setAdjusting(false)} customer={c} />
 
           <Modal opened={editing} onClose={() => setEditing(false)} title="Rango y crédito">
             <Stack>

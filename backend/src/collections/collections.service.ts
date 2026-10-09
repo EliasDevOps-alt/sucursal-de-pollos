@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { CrateHolderType, CrateMovementType, CustomerStatus, PaymentRecordStatus, Prisma, ReceivableMovementType } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
@@ -8,7 +9,7 @@ import { SequenceService } from '../common/sequence.service';
 import { CratesService } from '../crates/crates.service';
 import { CashService } from '../finance/cash.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CollectionFiltersDto, CreateCollectionDto } from './dto/collection.dto';
+import { CollectionFiltersDto, CreateCollectionDto, DebtAdjustmentDto } from './dto/collection.dto';
 
 const include = {
   customer: { select: { id: true, code: true, name: true, currentDebt: true } },
@@ -95,6 +96,41 @@ export class CollectionsService {
     const p = await this.prisma.payment.findFirst({ where: { id, saleId: null }, include });
     if (!p) throw new NotFoundException('Cobro no encontrado');
     return p;
+  }
+
+  /**
+   * Saldo inicial (deuda que el cliente ya tenía antes de usar el sistema) o corrección autorizada.
+   * Cambia la deuda sin mover dinero ni crear una venta; queda como movimiento ADJUSTMENT con su motivo y en la auditoría.
+   */
+  async adjust(dto: DebtAdjustmentDto, actor: AuthUser) {
+    return this.prisma.$transaction(async (tx) => {
+      const [row] = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM customers WHERE id = ${dto.customerId}::uuid FOR UPDATE`;
+      if (!row) throw new NotFoundException('Cliente no encontrado');
+      const customer = await tx.customer.findUniqueOrThrow({ where: { id: dto.customerId } });
+      const amount = money(D(dto.amount));
+      const reason = `${dto.kind === 'OPENING' ? 'Saldo inicial' : 'Ajuste'}: ${dto.reason.trim()}`;
+      const movement = await this.receivables.apply(tx, {
+        customerId: customer.id,
+        type: ReceivableMovementType.ADJUSTMENT,
+        amount,
+        referenceType: dto.kind === 'OPENING' ? 'opening_balance' : 'adjustment',
+        referenceId: randomUUID(),
+        actorId: actor.id,
+        reason,
+      });
+      await this.audit.log(
+        {
+          userId: actor.id,
+          action: 'receivables.adjust',
+          entityType: 'customer',
+          entityId: customer.id,
+          oldData: { debt: D(customer.currentDebt).toFixed(2) },
+          newData: { debt: D(movement.balanceAfter).toFixed(2), amount: amount.toFixed(2), reason },
+        },
+        tx,
+      );
+      return { customerId: customer.id, amount, debt: movement.balanceAfter, reason, movementId: movement.id };
+    });
   }
 
   async create(dto: CreateCollectionDto, actor: AuthUser) {

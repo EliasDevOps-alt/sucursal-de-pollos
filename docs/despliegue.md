@@ -1,6 +1,6 @@
 # Despliegue
 
-Tres formas de poner la demo en marcha, de la más rápida a la definitiva.
+Tres formas de poner el sistema en marcha, de la más rápida a la definitiva (la C es la de producción).
 
 | Opción | Cuándo usarla | Costo | HTTPS |
 |---|---|---|---|
@@ -37,7 +37,7 @@ Publica la demo que corre en la PC con una URL HTTPS pública temporal.
 
 La URL cambia cada vez que se reinicia el túnel y la PC debe quedar encendida. Sirve para pruebas cortas, no para operar.
 
-## C. Servidor en la nube con Docker (recomendado para el piloto)
+## C. Servidor en la nube con Docker (producción)
 
 ### 1. Contratar el servidor
 
@@ -52,48 +52,82 @@ ssh root@IP-DEL-SERVIDOR
 curl -fsSL https://get.docker.com | sh
 git clone <URL-del-repositorio> erp && cd erp
 cp .env.production.example .env
-nano .env        # DOMAIN, PUBLIC_URL, DB_PASSWORD y JWT_SECRET (claves largas: openssl rand -base64 48)
+nano .env
 ```
+
+En `.env` complete, como mínimo:
+
+| Variable | Qué poner |
+|---|---|
+| `DOMAIN`, `PUBLIC_URL` | El dominio (`erp.midominio.com`) y su URL con `https://` |
+| `DB_PASSWORD`, `JWT_SECRET` | Claves largas y distintas: `openssl rand -base64 48` |
+| `ADMIN_PASSWORD` | Contraseña inicial del usuario `admin` (mínimo 10 caracteres) |
+| `SEED_BRANCH_NAME` | Nombre de la sucursal además de la Central (ej. `Sucursal Abasto`) |
+| `BACKUP_HOUR`, `BACKUP_KEEP_DAYS` | Hora del respaldo diario y días que se conservan (por defecto 02:00 y 14) |
 
 ### 3. Levantar
 
 ```bash
 docker compose up -d --build
-docker compose exec backend npx prisma db seed      # solo la primera vez: roles, permisos, usuarios y catálogos
+docker compose exec backend npx prisma db seed      # solo la primera vez
+docker compose ps                                    # los cuatro servicios en "running"; backend "healthy"
 ```
+
+El seed de producción crea roles y permisos, la Central y una sucursal con su almacén y su caja, la cuenta bancaria, el catálogo base de productos y categorías, los tipos y rangos de cliente, y **un solo usuario: `admin`** con la contraseña de `ADMIN_PASSWORD`. No crea usuarios, proveedores ni datos de demostración.
 
 - Panel: `https://erp.midominio.com` (Caddy obtiene el certificado HTTPS solo, en el primer acceso).
 - App móvil: `https://erp.midominio.com/api`.
-- Documentación de la API: `https://erp.midominio.com/api/docs`.
+- La documentación de la API (`/api/docs`) está apagada en producción; se activa con `ENABLE_API_DOCS=true`.
 
-**Cambiar las contraseñas de los usuarios de demo antes de entregar el sistema** (todas usan `Admin123!` / `Demo123!`).
+### 4. Antes de empezar a operar
 
-### 4. Actualizar a una nueva versión
+1. Ingresar con `admin`, cambiar su contraseña (**Administración → Usuarios**) y anotarla en un lugar seguro.
+2. **Catálogos → Datos del negocio**: nombre, NIT, dirección, teléfono y pie de los comprobantes.
+3. Crear el personal en **Usuarios**: un usuario por persona (nunca compartidos), con su rol y, si es de sucursal, su sucursal.
+4. Revisar **Productos** (vida útil, stock mínimo) y cargar **Proveedores** y **Clientes** (rango, límite de crédito, dirección con ubicación). Lo que cada cliente ya debía se carga en su ficha con **Ajustar deuda → Saldo inicial**.
+5. **Finanzas**: registrar el dinero inicial de cada caja (otro ingreso: aporte) y abrir las cajas.
+6. **Canastillos**: alta de los canastillos que tiene el negocio (y los que ya están en manos de clientes).
+7. Compilar e instalar la app en los teléfonos con la URL del servidor (punto 7) y probar un pedido, una entrega y un cobro de punta a punta.
+8. Verificar que exista el primer respaldo en `./backups` y probar restaurarlo una vez (punto 6).
+
+### 5. Actualizar a una nueva versión
 
 ```bash
 cd erp && git pull
 docker compose up -d --build      # las migraciones de base de datos se aplican solas al arrancar el backend
 ```
 
-### 5. Respaldos
+Conviene actualizar fuera del horario de trabajo y con los teléfonos sincronizados: lo que esté en la cola de un teléfono se envía igual después (las operaciones no se duplican), pero así nadie ve errores durante el reinicio.
 
-Respaldo diario a las 02:00 con 14 días de retención (`crontab -e`):
+### 6. Respaldos
 
-```cron
-0 2 * * * cd /root/erp && docker compose exec -T db pg_dump -U erp -Fc erp_pollos > /root/respaldos/erp_$(date +\%F).dump && find /root/respaldos -name 'erp_*.dump' -mtime +14 -delete
+El servicio `backup` hace un respaldo de la base al arrancar y luego **todos los días a la hora `BACKUP_HOUR`**, en la carpeta `./backups` del servidor (`erp_pollos_AAAAMMDD_HHMM.dump`), y borra los de más de `BACKUP_KEEP_DAYS` días. Para ver que funciona: `docker compose logs backup`.
+
+**Copie los respaldos fuera del servidor** (otro proveedor, almacenamiento de objetos o una PC de la oficina): un respaldo en el mismo equipo no protege si se pierde el equipo. Por ejemplo, desde una PC con acceso SSH: `scp root@IP:/root/erp/backups/*.dump D:/respaldos-erp/`.
+
+Restaurar un respaldo (reemplaza todos los datos actuales):
+
+```bash
+docker compose stop backend web
+docker compose exec -T db pg_restore -U erp -d erp_pollos --clean --if-exists < backups/erp_pollos_AAAAMMDD_HHMM.dump
+docker compose start backend web
 ```
 
-Restaurar: `docker compose exec -T db pg_restore -U erp -d erp_pollos --clean < archivo.dump`.
+### 7. App móvil para producción
 
-Copie los respaldos fuera del servidor (otro proveedor o almacenamiento de objetos): un respaldo en el mismo equipo no protege si se pierde el equipo.
-
-### 6. App móvil para producción
-
-- Compilar en modo release: `flutter build apk --release --split-per-abi` (genera APK de ~20 MB por arquitectura).
+- Compilar con la URL del servidor: `flutter build apk --release --split-per-abi --dart-define=API_URL=https://erp.midominio.com/api` (la mayoría de los teléfonos usa `app-arm64-v8a-release.apk`).
 - Quitar `android:usesCleartextTraffic="true"` del `AndroidManifest.xml`: con HTTPS ya no hace falta.
-- Firmar el APK con una clave propia antes de distribuirlo (o publicarlo en Google Play).
+- Firmar el APK con una clave propia antes de distribuirlo (o publicarlo en Google Play) y guardar esa clave: sin ella no se pueden instalar actualizaciones encima.
+- Impresoras térmicas: vincularlas en el Bluetooth de cada teléfono y elegirlas en la app (**Estado y cuenta → Impresora**); imprimir una página de prueba.
+
+### 8. Seguridad incluida
+
+- Contraseñas guardadas con bcrypt; sesiones con token firmado (12 h en el panel, 7 días en la app para trabajar sin señal).
+- Tras 5 intentos fallidos la cuenta se bloquea 15 minutos (también al autorizar con credenciales de supervisor); tras 20 fallos desde una misma IP, esa IP. Los intentos fallidos quedan en la auditoría.
+- Permisos por rol en cada operación de la API (no solo en las pantallas) y auditoría de lo crítico.
+- HTTPS automático, cabeceras de seguridad en el panel y registros de los contenedores con rotación.
 
 ## Notas
 
-- La configuración Docker (`docker-compose.yml`) se validó con `docker compose config`; la construcción de imágenes no se probó en la PC de desarrollo porque Docker Desktop no estaba en ejecución.
+- La configuración Docker (`docker-compose.yml`) se valida con `docker compose config`.
 - Zona horaria: los reportes agrupan por día en `America/La_Paz` (`REPORT_TZ`).

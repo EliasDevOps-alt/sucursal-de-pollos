@@ -3,14 +3,28 @@
 {$DOMAIN::80} {
 	encode gzip
 
+	header {
+		# Seguridad básica del panel: sin incrustarse en otros sitios, sin adivinar tipos, sin enviar la URL a terceros.
+		X-Frame-Options DENY
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
 	handle /api/* {
 		reverse_proxy backend:3000
 	}
 
+	# Archivos del panel con hash en el nombre: se guardan en el navegador por un año.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
 	handle {
 		root * /srv
-		# Aplicación de una sola página: las rutas del panel se resuelven en index.html.
+		# Aplicación de una sola página: las rutas del panel se resuelven en index.html (que no se guarda en caché).
 		try_files {path} /index.html
+		header /index.html Cache-Control "no-cache"
 		file_server
 	}
 }

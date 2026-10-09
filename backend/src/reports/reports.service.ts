@@ -11,6 +11,14 @@ export interface DateRange {
   to: string;
 }
 
+/** Filtros de ventas: sucursal (o 'routes' = entregas del reparto, que salen de los vehículos), categoría, vendedor y cliente. */
+export interface SalesFilters {
+  branchId?: string;
+  categoryId?: string;
+  sellerId?: string;
+  customerId?: string;
+}
+
 type Num = Prisma.Decimal | number | bigint | null;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -44,33 +52,46 @@ export class ReportsService {
     return { from: start, to: end };
   }
 
-  private localToday() {
+  localToday() {
     // en-CA formatea como AAAA-MM-DD
     return new Intl.DateTimeFormat('en-CA', { timeZone: this.tz }).format(new Date());
   }
 
-  private shiftDays(date: string, days: number) {
+  shiftDays(date: string, days: number) {
     const d = new Date(`${date}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + days);
     return d.toISOString().slice(0, 10);
   }
 
   /** Condición SQL: la columna (timestamp guardado en UTC) cae dentro del rango de fechas locales. */
-  private inRange(column: string, r: DateRange) {
+  inRange(column: string, r: DateRange) {
     const col = Prisma.raw(column);
     return Prisma.sql`${col} >= ((${r.from}::date)::timestamp AT TIME ZONE ${this.tz}) AT TIME ZONE 'UTC'
       AND ${col} < (((${r.to}::date + 1))::timestamp AT TIME ZONE ${this.tz}) AT TIME ZONE 'UTC'`;
   }
 
   /** Fecha local de un timestamp guardado en UTC. */
-  private localDate(column: string) {
+  localDate(column: string) {
     return Prisma.sql`((${Prisma.raw(column)} AT TIME ZONE 'UTC') AT TIME ZONE ${this.tz})::date`;
+  }
+
+  /** Condiciones extra sobre `s` (ventas) y `p` (productos) según los filtros. */
+  private salesFilter(f: SalesFilters = {}) {
+    const parts: Prisma.Sql[] = [];
+    if (f.branchId === 'routes') parts.push(Prisma.sql`AND s.branch_id IS NULL`);
+    else if (f.branchId) parts.push(Prisma.sql`AND s.branch_id = ${f.branchId}::uuid`);
+    if (f.categoryId) parts.push(Prisma.sql`AND p.category_id = ${f.categoryId}::uuid`);
+    if (f.sellerId) parts.push(Prisma.sql`AND s.seller_id = ${f.sellerId}::uuid`);
+    if (f.customerId) parts.push(Prisma.sql`AND s.customer_id = ${f.customerId}::uuid`);
+    return parts.length ? Prisma.join(parts, ' ') : Prisma.empty;
   }
 
   // ── Ventas ──────────────────────────────────────────────
 
   /** Serie diaria completa (los días sin ventas aparecen en cero). */
-  async salesByDay(r: DateRange) {
+  async salesByDay(r: DateRange, f: SalesFilters = {}) {
+    // Con filtro de categoría el ingreso es el de las líneas de esa categoría (no el total de la venta).
+    const amount = f.categoryId ? Prisma.sql`SUM(si.subtotal - si.returned_amount)` : Prisma.sql`s.total_amount - s.returned_amount`;
     const rows = await this.prisma.$queryRaw<{ day: Date; revenue: Num; cost: Num; count: Num; kg: Num }[]>`
       WITH days AS (
         SELECT generate_series(${r.from}::date, ${r.to}::date, interval '1 day')::date AS day
@@ -79,12 +100,13 @@ export class ReportsService {
         SELECT a.sale_item_id, SUM((a.weight_kg - a.restocked_weight_kg) * a.cost_per_kg) AS cost FROM sale_lot_allocations a GROUP BY a.sale_item_id
       ),
       per_sale AS (
-        SELECT s.id, s.status, ${this.localDate('s.created_at')} AS day, s.total_amount - s.returned_amount AS total_amount,
+        SELECT s.id, s.status, ${this.localDate('s.created_at')} AS day, ${amount} AS total_amount,
                SUM(ic.cost) AS cost, SUM(si.requested_weight_kg - si.returned_weight_kg) AS kg
         FROM sales s
         JOIN sale_items si ON si.sale_id = s.id
         JOIN item_cost ic ON ic.sale_item_id = si.id
-        WHERE s.status IN ('CONFIRMED', 'RETURNED') AND ${this.inRange('s.created_at', r)}
+        JOIN products p ON p.id = si.product_id
+        WHERE s.status IN ('CONFIRMED', 'RETURNED') AND ${this.inRange('s.created_at', r)} ${this.salesFilter(f)}
         GROUP BY s.id
       )
       SELECT d.day, COALESCE(SUM(p.total_amount), 0) AS revenue, COALESCE(SUM(p.cost), 0) AS cost,
@@ -107,7 +129,7 @@ export class ReportsService {
   }
 
   /** Rentabilidad agrupada usando el costo real congelado en cada asignación de lote. */
-  async profitability(r: DateRange, groupBy: GroupBy) {
+  async profitability(r: DateRange, groupBy: GroupBy, f: SalesFilters = {}) {
     type Row = { id: string | null; label: string; detail: string | null; kg: Num; revenue: Num; cost: Num; sales: Num };
     let rows: Row[];
 
@@ -125,7 +147,7 @@ export class ReportsService {
         JOIN lots l ON l.id = a.lot_id
         JOIN products p ON p.id = l.product_id
         LEFT JOIN (SELECT allocation_id, SUM(amount) AS amount FROM sale_return_items GROUP BY allocation_id) ra ON ra.allocation_id = a.id
-        WHERE s.status IN ('CONFIRMED', 'RETURNED') AND ${this.inRange('s.created_at', r)}
+        WHERE s.status IN ('CONFIRMED', 'RETURNED') AND ${this.inRange('s.created_at', r)} ${this.salesFilter(f)}
         GROUP BY l.id, l.lot_code, p.name`;
     } else {
       const key = {
@@ -147,7 +169,7 @@ export class ReportsService {
         JOIN products p ON p.id = si.product_id
         JOIN users u ON u.id = s.seller_id
         LEFT JOIN customers c ON c.id = s.customer_id
-        WHERE s.status IN ('CONFIRMED', 'RETURNED') AND ${this.inRange('s.created_at', r)}
+        WHERE s.status IN ('CONFIRMED', 'RETURNED') AND ${this.inRange('s.created_at', r)} ${this.salesFilter(f)}
         GROUP BY ${group}`;
     }
 
@@ -176,6 +198,7 @@ export class ReportsService {
     return {
       range: r,
       groupBy,
+      filters: f,
       totals: { revenue, cost, margin, marginPercentage: pct(margin, revenue), kg: kg(result.reduce((s, x) => s.plus(x.kg), ZERO)) },
       rows: result,
     };
@@ -420,19 +443,22 @@ export class ReportsService {
   // ── Dashboard ───────────────────────────────────────────
 
   /** Resumen del período con comparación contra el período anterior de igual duración. */
-  async dashboard(r: DateRange, includeFinancial: boolean) {
+  async dashboard(r: DateRange, includeFinancial: boolean, f: SalesFilters = {}) {
     const days = Math.round((Date.parse(r.to) - Date.parse(r.from)) / 86_400_000) + 1;
     const previous: DateRange = { from: this.shiftDays(r.from, -days), to: this.shiftDays(r.from, -1) };
 
     const [series, prevSeries, top, receivables, alerts, stock, purchases] = await Promise.all([
-      this.salesByDay(r),
-      this.salesByDay(previous),
-      this.profitability(r, 'product'),
+      this.salesByDay(r, f),
+      this.salesByDay(previous, f),
+      this.profitability(r, 'product', f),
       this.receivables(),
       this.alerts(),
       this.prisma.$queryRaw<{ kg: Num; value: Num }[]>`
         SELECT COALESCE(SUM(ib.weight_kg), 0) AS kg, COALESCE(SUM(ib.weight_kg * l.actual_cost_per_kg), 0) AS value
-        FROM inventory_balances ib JOIN lots l ON l.id = ib.lot_id WHERE ib.weight_kg > 0`,
+        FROM inventory_balances ib JOIN lots l ON l.id = ib.lot_id JOIN warehouses w ON w.id = ib.warehouse_id
+        WHERE ib.weight_kg > 0
+          ${f.branchId === 'routes' ? Prisma.sql`AND w.type = 'VEHICLE'` : f.branchId ? Prisma.sql`AND w.branch_id = ${f.branchId}::uuid` : Prisma.empty}
+          ${f.categoryId ? Prisma.sql`AND l.product_id IN (SELECT id FROM products WHERE category_id = ${f.categoryId}::uuid)` : Prisma.empty}`,
       this.prisma.$queryRaw<{ total: Num; count: Num }[]>`
         SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS count FROM purchases
         WHERE status <> 'CANCELLED' AND ${this.inRange('purchase_date', r)}`,
@@ -449,6 +475,7 @@ export class ReportsService {
     return {
       range: r,
       previousRange: previous,
+      filters: f,
       kpis: {
         revenue,
         revenueDeltaPercentage: prevRevenue.gt(0) ? pct(revenue.minus(prevRevenue), prevRevenue) : null,

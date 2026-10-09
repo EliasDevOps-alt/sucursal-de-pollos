@@ -6,6 +6,11 @@ import { PERMISSION_DESCRIPTIONS, PermissionCode, ROLE_DEFINITIONS } from '../sr
 
 const prisma = new PrismaClient();
 
+// SEED_MODE=production: solo lo necesario para empezar a operar (sin usuarios ni proveedores de demostración).
+// El administrador toma su contraseña de ADMIN_PASSWORD y la sucursal su nombre de SEED_BRANCH_NAME.
+const PRODUCTION = process.env.SEED_MODE === 'production';
+const BRANCH_NAME = process.env.SEED_BRANCH_NAME?.trim() || (PRODUCTION ? 'Sucursal 1' : 'Sucursal Mercado Norte');
+
 async function seedSecurity() {
   const codes = Object.keys(PERMISSION_DESCRIPTIONS) as PermissionCode[];
   for (const code of codes) {
@@ -43,7 +48,7 @@ async function seedOrganization() {
   const branch1 = await prisma.branch.upsert({
     where: { code: 'SUC1' },
     update: {},
-    create: { code: 'SUC1', name: 'Sucursal Mercado Norte', address: 'Mercado Norte, puesto 12', priceEditEnabled: true },
+    create: { code: 'SUC1', name: BRANCH_NAME, address: PRODUCTION ? null : 'Mercado Norte, puesto 12', priceEditEnabled: true },
   });
 
   await prisma.warehouse.upsert({
@@ -54,13 +59,13 @@ async function seedOrganization() {
   await prisma.warehouse.upsert({
     where: { code: 'ALM-SUC1' },
     update: {},
-    create: { code: 'ALM-SUC1', name: 'Almacén Sucursal Mercado Norte', type: WarehouseType.BRANCH, branchId: branch1.id },
+    create: { code: 'ALM-SUC1', name: `Almacén ${BRANCH_NAME}`, type: WarehouseType.BRANCH, branchId: branch1.id },
   });
 
   // Cuentas de dinero: una caja de efectivo por sucursal y la cuenta bancaria (QR y transferencias).
   const accounts = [
     { code: 'CAJA-CEN', name: 'Caja Central', type: 'CASH' as const, branchId: central.id },
-    { code: 'CAJA-SUC1', name: 'Caja Sucursal Mercado Norte', type: 'CASH' as const, branchId: branch1.id },
+    { code: 'CAJA-SUC1', name: `Caja ${BRANCH_NAME}`, type: 'CASH' as const, branchId: branch1.id },
     { code: 'BANCO', name: 'Cuenta bancaria (QR y transferencias)', type: 'BANK' as const, branchId: null },
   ];
   for (const a of accounts) await prisma.cashAccount.upsert({ where: { code: a.code }, update: {}, create: a });
@@ -72,8 +77,9 @@ async function seedOrganization() {
 
 async function seedUsers(branch1Id: string) {
   const roles = Object.fromEntries((await prisma.role.findMany()).map((r) => [r.code, r.id]));
-  const users = [
-    { username: 'admin', password: 'Admin123!', fullName: 'Administrador General', role: 'ADMIN' },
+  const adminPassword = PRODUCTION ? process.env.ADMIN_PASSWORD! : 'Admin123!';
+  const demo = [
+    { username: 'admin', password: adminPassword, fullName: 'Administrador General', role: 'ADMIN' },
     { username: 'vcentral', password: 'Demo123!', fullName: 'Vendedor Central Demo', role: 'SELLER_CENTRAL' },
     { username: 'vsucursal', password: 'Demo123!', fullName: 'Vendedor Sucursal Demo', role: 'SELLER_BRANCH', branchId: branch1Id },
     { username: 'preventista', password: 'Demo123!', fullName: 'Preventista Demo', role: 'PRESELLER' },
@@ -81,6 +87,8 @@ async function seedUsers(branch1Id: string) {
     { username: 'chofer', password: 'Demo123!', fullName: 'Chofer Demo', role: 'DRIVER' },
     { username: 'cobrador', password: 'Demo123!', fullName: 'Cobrador Demo', role: 'COLLECTOR' },
   ];
+  // En producción solo el administrador; el resto del personal lo crea él en Administración → Usuarios.
+  const users: { username: string; password: string; fullName: string; role: string; branchId?: string }[] = PRODUCTION ? demo.slice(0, 1) : demo;
 
   for (const u of users) {
     await prisma.user.upsert({
@@ -144,7 +152,7 @@ async function seedCatalogs() {
     { name: 'Avícola SOFIA Distribución', taxId: '1028765011', phone: '70033344', contactName: 'Luis Vargas', address: 'Parque Industrial, mza. 4' },
     { name: 'Granja San Pedro', taxId: '4567890', phone: '70055566', contactName: 'Pedro Quispe', address: 'Comunidad San Pedro' },
   ];
-  for (const s of suppliers) {
+  for (const s of PRODUCTION ? [] : suppliers) {
     // supplier no tiene campo único; se busca por nombre para que el seed siga siendo idempotente.
     const exists = await prisma.supplier.findFirst({ where: { name: s.name } });
     if (!exists) await prisma.supplier.create({ data: s });
@@ -170,11 +178,15 @@ async function seedCatalogs() {
 }
 
 async function main() {
+  // Se valida antes de tocar la base: un seed a medias dejaría la sucursal con el nombre por defecto.
+  if (PRODUCTION && (process.env.ADMIN_PASSWORD ?? '').length < 10) {
+    throw new Error('Defina ADMIN_PASSWORD (al menos 10 caracteres) para crear el administrador en producción');
+  }
   await seedSecurity();
   const { branch1 } = await seedOrganization();
   await seedUsers(branch1.id);
   await seedCatalogs();
-  console.log('Seed completado.');
+  console.log(PRODUCTION ? 'Seed de producción completado: ingrese con el usuario admin y la contraseña de ADMIN_PASSWORD.' : 'Seed completado.');
 }
 
 main()

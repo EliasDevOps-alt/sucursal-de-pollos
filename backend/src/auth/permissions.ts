@@ -53,6 +53,7 @@ export const PERMISSIONS = {
   // Finanzas
   CASH_VIEW: 'cash.view',
   CASH_MANAGE: 'cash.manage',
+  RECEIVABLES_ADJUST: 'receivables.adjust',
   SETTLEMENTS_MANAGE: 'settlements.manage',
   // Reportes
   REPORTS_VIEW: 'reports.view',
@@ -102,6 +103,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
   'crates.manage': 'Registrar altas, traspasos y bajas de canastillos',
   'cash.view': 'Ver cajas, cuentas, movimientos de dinero y rendiciones',
   'cash.manage': 'Abrir y cerrar caja, registrar ingresos, egresos y traspasos',
+  'receivables.adjust': 'Cargar saldos iniciales y ajustar la deuda de un cliente',
   'settlements.manage': 'Recibir rendiciones de choferes y cobradores',
   'reports.view': 'Ver reportes operativos y dashboard',
   'reports.financial': 'Ver reportes de rentabilidad y financieros',

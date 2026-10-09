@@ -1,15 +1,25 @@
-# Despliegue completo: base de datos + API + panel web (con HTTPS automático vía Caddy).
+# Despliegue completo: base de datos + API + panel web (con HTTPS automático vía Caddy) + respaldo diario.
 #   cp .env.production.example .env   (y completar)
 #   docker compose up -d --build
-#   docker compose exec backend npx prisma db seed     (solo la primera vez)
+#   docker compose exec backend npx prisma db seed     (solo la primera vez: crea roles, sucursales y el usuario admin)
+# Guía completa: docs/despliegue.md
+x-logging: &logging
+  # Los registros de cada contenedor rotan (3 archivos de 10 MB) para no llenar el disco.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:17
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: erp_pollos
       POSTGRES_USER: erp
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD en .env}
+      TZ: America/La_Paz
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -20,6 +30,7 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    logging: *logging
     depends_on:
       db:
         condition: service_healthy
@@ -32,12 +43,25 @@ services:
       DEFAULT_MARGIN_PERCENT: ${DEFAULT_MARGIN_PERCENT:-20}
       REPORT_TZ: America/La_Paz
       TZ: America/La_Paz
+      # Seed de producción: solo el administrador (sin usuarios ni proveedores de demostración).
+      SEED_MODE: ${SEED_MODE:-production}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SEED_BRANCH_NAME: ${SEED_BRANCH_NAME:-}
+      ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
 
   web:
     build: ./web
     restart: unless-stopped
+    logging: *logging
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       DOMAIN: ${DOMAIN:-:80}
     ports:
@@ -46,6 +70,24 @@ services:
     volumes:
       - caddy-data:/data
       - caddy-config:/config
+
+  # Respaldo diario de la base en ./backups (se conservan BACKUP_KEEP_DAYS días). Copie esa carpeta fuera del servidor.
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_HOUR: ${BACKUP_HOUR:-2}
+      TZ: America/La_Paz
+    volumes:
+      - ./backups:/backups
+      - ./ops/backup.sh:/backup.sh:ro
+    entrypoint: ["sh", "/backup.sh"]
 
 volumes:
   db-data:

@@ -1,6 +1,6 @@
-# ERP Distribuidora de Pollo — Demo
+# ERP Distribuidora de Pollo
 
-Prototipo funcional del ERP para compra, distribución y comercialización de pollo faenado.
+ERP para compra, distribución y comercialización de pollo faenado: compras con merma y costo real por lote, inventario FEFO, ventas, preventa, reparto y cobranza con apps Android sin señal, canastillos, caja y banco, comprobantes impresos y reportes.
 
 ## Estructura
 
@@ -8,8 +8,9 @@ Prototipo funcional del ERP para compra, distribución y comercialización de po
 |---|---|---|
 | `backend/` | API central y reglas de negocio | NestJS + Prisma + PostgreSQL |
 | `web/` | Panel administrativo | React + Vite + Mantine |
-| `mobile/` | App Android de preventa offline | Flutter + SQLite ([ver README](mobile/README.md)) |
-| `docs/` | Decisiones técnicas y alcance de la demo | — |
+| `mobile/` | App Android sin señal: preventista, chofer y cobrador (impresión Bluetooth) | Flutter + SQLite ([ver README](mobile/README.md)) |
+| `docs/` | Despliegue, manual de uso, capacitación, decisiones técnicas y alcance | — |
+| `ops/` | Script de respaldo diario (servicio `backup` de docker-compose) | sh + pg_dump |
 
 ## Requisitos
 
@@ -36,7 +37,7 @@ npm install
 npm run dev                 # http://localhost:5173 (reenvía /api al backend)
 ```
 
-Usuarios de demo: `admin` / `Admin123!`; `vcentral`, `vsucursal`, `preventista`, `contador` con `Demo123!`.
+Usuarios de desarrollo: `admin` / `Admin123!`; `vcentral`, `vsucursal`, `preventista`, `contador`, `chofer`, `cobrador` con `Demo123!`. En producción el seed crea solo `admin`, con la contraseña de `ADMIN_PASSWORD` (ver [docs/despliegue.md](docs/despliegue.md)).
 
 ## Datos de demostración
 
@@ -49,10 +50,12 @@ Requiere la API en marcha. Conserva usuarios, productos, proveedores y almacenes
 
 ## Despliegue
 
-`docker compose up -d --build` levanta base de datos, API y panel con HTTPS automático. Guía completa (PC local, túnel temporal o servidor en la nube): [docs/despliegue.md](docs/despliegue.md).
+`docker compose up -d --build` levanta base de datos, API, panel con HTTPS automático y respaldo diario. Guía completa (PC local, túnel temporal o servidor en la nube), lista de verificación para empezar a operar y restauración de respaldos: [docs/despliegue.md](docs/despliegue.md).
 
 ## Documentación
 
+- [docs/manual-usuario.md](docs/manual-usuario.md) — manual de uso por rol
+- [docs/capacitacion.md](docs/capacitacion.md) — plan de capacitación y puesta en marcha
 - [docs/guion-demo.md](docs/guion-demo.md) — guion de la presentación al cliente
 - [docs/despliegue.md](docs/despliegue.md) — despliegue y respaldos
 - [docs/decisiones-tecnicas.md](docs/decisiones-tecnicas.md) — decisiones de diseño y desviaciones del documento de base de datos

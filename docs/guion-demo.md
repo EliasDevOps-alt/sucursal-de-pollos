@@ -92,12 +92,14 @@ Los datos de demostración dejan una ruta **en curso** de hoy, con la mitad de l
 3. **Comprobantes** (panel): cada impresión con original o copia, quién la hizo y si fue por la web o por Bluetooth; **Ver / reimprimir**.
 4. **Catálogos → Datos del negocio**: cambiar el teléfono y mostrar que el siguiente comprobante ya lo trae.
 
-## 5. Reportes y trazabilidad (5 min) — `admin`
+## 5. Reportes y trazabilidad (6 min) — `admin`
 
-1. **Reportes → Rentabilidad**: por producto, **por lote** (qué compra dejó más margen), por cliente y por vendedor. Botón **Tabla** para ver cifras exactas.
-2. **Merma**: por proveedor. "¿Qué granja entrega con más diferencia de peso?"
-3. **Cuentas por cobrar**: antigüedad de la deuda y uso del límite de cada cliente.
-4. **Trazabilidad completa**: Inventario → Kardex → un lote → su compra y proveedor; desde el lote, las ventas que lo consumieron.
+1. **Inicio**: la franja **Hoy** (reparto, efectivo, por rendir, canastillos con clientes) y las ventas del período; filtrar por sucursal o por **Reparto en ruta**.
+2. **Reportes → Rentabilidad**: por producto, **por lote** (qué compra dejó más margen), por cliente y por vendedor; con filtros de sucursal, categoría, vendedor y cliente. Botón **Tabla** para ver cifras exactas.
+3. **Sucursales**: central, sucursal y reparto lado a lado (ventas, margen, transferencias, pérdidas, stock). **Logística**: cumplimiento por chofer y motivos de no entrega. **Compras**: costo por kg y merma por proveedor. **Clientes**: los mejores y los que dejaron de comprar. **Canastillos**: dónde están hoy.
+4. **Merma**: por proveedor. "¿Qué granja entrega con más diferencia de peso?"
+5. **Cuentas por cobrar**: antigüedad de la deuda y uso del límite de cada cliente.
+6. **Trazabilidad completa**: Inventario → Kardex → un lote → su compra y proveedor; desde el lote, las ventas que lo consumieron.
 
 ## 6. Cierre (3 min)
 

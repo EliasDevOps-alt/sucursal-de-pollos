@@ -14,8 +14,10 @@ class GeoPoint {
 /// Operaciones de negocio del preventista. Todas funcionan sin conexión:
 /// guardan el dato local y encolan la operación para el servidor.
 class Workspace {
-  Workspace(this.db);
+  Workspace(this.db, {DateTime Function()? clock}) : _now = clock ?? DateTime.now;
   final LocalDb db;
+  /// Hora del teléfono (las pruebas la fijan para que las capturas no cambien con el reloj).
+  final DateTime Function() _now;
   static const _uuid = Uuid();
 
   Future<Customer> createCustomer({
@@ -45,7 +47,7 @@ class Workspace {
     await db.enqueue(OutboxOp(
       id: _uuid.v4(),
       type: 'CUSTOMER_CREATE',
-      createdAt: DateTime.now(),
+      createdAt: _now(),
       payload: {
         'id': customerId,
         'name': customer.name,
@@ -73,7 +75,7 @@ class Workspace {
       customerId: customer.id,
       customerName: customer.name,
       items: items,
-      createdAt: DateTime.now(),
+      createdAt: _now(),
       scheduledDeliveryDate: scheduledDeliveryDate,
       notes: _blankToNull(notes),
     );
@@ -133,7 +135,7 @@ class Workspace {
       await db.enqueue(OutboxOp(
         id: _uuid.v4(),
         type: 'PRESALE_UPDATE',
-        createdAt: DateTime.now(),
+        createdAt: _now(),
         payload: {
           'presaleId': presale.id,
           'items': itemsJson,
@@ -153,7 +155,7 @@ class Workspace {
     await db.enqueue(OutboxOp(
       id: _uuid.v4(),
       type: 'CUSTOMER_ADDRESS_ADD',
-      createdAt: DateTime.now(),
+      createdAt: _now(),
       payload: {'customerId': customer.id, ...(a.toJson()..remove('isPrimary')..removeWhere((_, v) => v == null))},
     ));
     final updated = customer.withAddress(a);
@@ -167,7 +169,7 @@ class Workspace {
     await db.enqueue(OutboxOp(
       id: _uuid.v4(),
       type: 'VISIT_CREATE',
-      createdAt: DateTime.now(),
+      createdAt: _now(),
       payload: {
         'id': id,
         'customerId': customer.id,
@@ -195,7 +197,7 @@ class Workspace {
     await db.enqueue(OutboxOp(
       id: _uuid.v4(),
       type: 'PRESALE_CANCEL',
-      createdAt: DateTime.now(),
+      createdAt: _now(),
       payload: {'presaleId': presale.id, 'reason': reason},
     ));
   }
@@ -203,7 +205,7 @@ class Workspace {
   Future<void> recordPosition(GeoPoint p, String eventType, {String? referenceId}) => db.enqueue(OutboxOp(
         id: _uuid.v4(),
         type: 'GPS_POSITION',
-        createdAt: DateTime.now(),
+        createdAt: _now(),
         payload: {
           'latitude': p.latitude,
           'longitude': p.longitude,
@@ -249,7 +251,7 @@ class Workspace {
     await db.enqueue(OutboxOp(
       id: _uuid.v4(),
       type: 'DELIVERY_COMPLETE',
-      createdAt: DateTime.now(),
+      createdAt: _now(),
       payload: {
         'stopId': stop.id,
         'items': [
@@ -284,7 +286,7 @@ class Workspace {
     await db.enqueue(OutboxOp(
       id: _uuid.v4(),
       type: 'DELIVERY_FAIL',
-      createdAt: DateTime.now(),
+      createdAt: _now(),
       payload: {
         'stopId': stop.id,
         'problemType': problemType,
@@ -317,7 +319,7 @@ class Workspace {
       customerName: customer.name,
       amount: amount,
       paymentMethod: paymentMethod,
-      collectedAt: DateTime.now(),
+      collectedAt: _now(),
       isAdvance: amount > customer.currentDebt + 0.005,
       paidByName: _blankToNull(paidByName),
       cratesPickedUp: cratesPickedUp,
@@ -329,7 +331,7 @@ class Workspace {
     await db.enqueue(OutboxOp(
       id: _uuid.v4(),
       type: 'COLLECTION_CREATE',
-      createdAt: DateTime.now(),
+      createdAt: _now(),
       payload: {
         'id': id,
         'customerId': customer.id,
@@ -354,7 +356,7 @@ class Workspace {
     await db.enqueue(OutboxOp(
       id: _uuid.v4(),
       type: 'CRATE_PICKUP',
-      createdAt: DateTime.now(),
+      createdAt: _now(),
       payload: {'customerId': customer.id, 'quantity': quantity, if (_blankToNull(notes) != null) 'notes': notes!.trim()},
     ));
   }
@@ -363,7 +365,7 @@ class Workspace {
   Future<void> logPrint(String slug, String documentId) => db.enqueue(OutboxOp(
         id: _uuid.v4(),
         type: 'RECEIPT_PRINT',
-        createdAt: DateTime.now(),
+        createdAt: _now(),
         payload: {'documentType': slug, 'documentId': documentId},
       ));
 

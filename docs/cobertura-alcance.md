@@ -16,11 +16,11 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 | 6.6 Cobranza y crédito | ✅ 10 de 10 | Cobros en oficina y en la calle (app del cobrador offline), mapa, recibo con firma, canastillos y rendición |
 | 6.7 Canastillos | ✅ 7 de 7 | Saldos por tenedor, entregas y recojos en rutas y cobros, faltantes a cargo, bajas con sanción y trazabilidad |
 | 6.8 Finanzas operativas | ✅ 11 de 11 | Cajas y banco, ingresos y egresos automáticos y manuales, apertura y cierre con arqueo, rendiciones con diferencias |
-| 6.9 Dashboard y reportes | 🟡 | Hechos los de ventas, stock, merma, rentabilidad y cuentas por cobrar; faltan dinero, logística, canastillos y sucursales |
+| 6.9 Dashboard y reportes | ✅ | Tablero con la operación del día (reparto, dinero, canastillos) y ventas filtrables; reportes de rentabilidad, sucursales, logística, compras, clientes, canastillos, merma y cobranza con filtros |
 | §8 Apps móviles | ✅ 3 de 3 | Preventista, chofer y cobrador en una sola app por rol, offline, con impresión Bluetooth |
 | §11 Recibos e impresión | ✅ | Venta, entrega, cobro, rendición y cierre de caja; térmica 80/58 mm desde la web y por Bluetooth desde la app; firma en el papel; historial y reimpresión con copias numeradas |
 
-**Estimación de avance del MVP: ~90 %.** Están todos los módulos operativos (compras, inventario, ventas, preventa, logística, cobranza, canastillos, finanzas e impresión). Falta la fase de cierre: dashboard y reportes de dinero, logística, canastillos y sucursales, filtros completos, puesta en producción y capacitación.
+**MVP completo.** Están todos los módulos del alcance, los reportes, la puesta en producción (Docker con HTTPS, respaldo diario, seed de producción, freno a la adivinación de contraseñas) y el material de capacitación ([manual por rol](manual-usuario.md) y [plan de capacitación](capacitacion.md)). Queda fuera solo la venta por canastillo como unidad (hoy se vende por kilo; ver §6.3) y algunas mejoras menores marcadas 🟡.
 
 ## Detalle
 
@@ -103,12 +103,12 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 
 ### 6.9 Dashboard y reportes
 - ✅ Dashboard general; ventas, stock y cuentas por cobrar
-- 🟡 Rutas activas, entregas y problemas de entrega en Logística (no en el tablero); dinero, por rendir y diferencias de caja en Finanzas; canastillos pendientes en su propia página (falta unificarlos en el tablero, fase M)
+- ✅ Tablero con la operación de hoy: reparto (entregadas, pendientes, no entregadas), efectivo en cajas y banco, lo que falta rendir y canastillos con clientes (cada bloque según los permisos de quien mira)
 - ✅ Lotes próximos a vencer y alertas de bajo stock
 - ✅ Reportes de ventas, inventario, merma, rentabilidad (por producto, lote, cliente y vendedor) y cobranza (antigüedad)
-- 🟡 Compras y clientes: listados, sin reporte dedicado
-- ❌ Reportes de logística, sucursales y canastillos
-- 🟡 Filtros: rangos de fecha predefinidos y **rango libre** (hasta un año) en tablero, reportes y auditoría, y algunos filtros por producto/almacén; faltan filtros por sucursal, categoría, usuario, vehículo y cliente en todos los reportes
+- ✅ Compras (por proveedor, producto y día; costo por kg, merma y deuda con proveedores) y clientes (mejores, nuevos, los que dejaron de comprar, por tipo, ventas rápidas)
+- ✅ Logística (cumplimiento, motivos de no entrega, kilos, vendido y cobrado por chofer, vehículo y día), sucursales (central, sucursal y reparto: ventas, margen, transferencias, pérdidas y stock) y canastillos (dónde están, movimientos, bajas, sanciones y clientes que los tienen)
+- ✅ Filtros: rango de fechas (predefinido o libre, hasta un año) en todo; sucursal (o reparto), categoría, vendedor y cliente en ventas, rentabilidad y tablero; chofer y vehículo en logística; proveedor en compras; tipo de cliente en clientes
 - ✅ Gráficos históricos
 
 ### 7. Reglas de negocio
@@ -128,6 +128,14 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Auditoría de todo lo crítico, con visor y filtros
 - ✅ Offline de preventas, entregas y cobranzas
 - ✅ Conflictos: quedan en REVIEW con su motivo, el teléfono los muestra y Administración los resuelve en la web
+
+### Puesta en producción y capacitación
+- ✅ Despliegue con Docker: base, API, panel con HTTPS automático (Caddy) y cabeceras de seguridad; registros con rotación; chequeo de salud de la API
+- ✅ Respaldo diario automático con retención y procedimiento de restauración
+- ✅ Seed de producción: solo el administrador (contraseña desde el entorno), sin usuarios ni proveedores de demostración
+- ✅ Saldos iniciales: deuda anterior de cada cliente (ajuste con motivo, sin mover dinero); stock inicial como compra recibida; canastillos y dinero inicial con sus altas
+- ✅ Bloqueo temporal tras intentos fallidos de contraseña (por cuenta y por IP), documentación de la API apagada en producción
+- ✅ Manual por rol, plan de capacitación con ejercicios y lista de verificación para el arranque
 
 ### 11. Recibos e impresión
 - ✅ Comprobantes de venta, entrega (o constancia de visita fallida), cobro, rendición y cierre de caja, con el encabezado del negocio (nombre, NIT, dirección, teléfono y pie, editables en Catálogos)
@@ -152,6 +160,6 @@ Pendientes: `product_ranges`, `lot_shrinkages` (la merma está en el lote y la r
 | J. Cobranza + app del cobrador + canastillos ✅ | Cobros offline, mapa de pendientes, recibo y firma, canastillos por cantidad y responsable, bajas y sanciones | 2–2,5 semanas |
 | K. Finanzas operativas ✅ | Cuentas de caja, movimientos automáticos (ventas, cobros, compras), egresos, rendiciones, cierres con diferencias | 1,5 semanas |
 | L. Recibos e impresión ✅ | Recibos PDF de venta, entrega y cobranza; impresión térmica 80 mm (web y Bluetooth desde la app); reimpresión | 1 semana |
-| M. Cierre | Reportes y dashboard faltantes, filtros completos, pruebas, puesta en producción y capacitación | 1–1,5 semanas |
+| M. Cierre ✅ | Reportes y dashboard faltantes, filtros completos, pruebas, puesta en producción y capacitación | 1–1,5 semanas |
 
 \*Una persona a tiempo completo con apoyo de IA. **Total estimado: 10–13 semanas** para el MVP completo.

@@ -476,6 +476,13 @@ export interface Dashboard {
   topProducts: { id: string; label: string; kg: Dec; revenue: Dec; margin?: Dec; marginPercentage?: Dec }[];
   alerts: Alerts;
   topDebtors: Debtor[];
+  /** Operación de hoy: cada bloque llega solo si el usuario tiene el permiso correspondiente. */
+  today: {
+    date: string;
+    routes?: { routes: number; inProgress: number; planned: number; stops: number; delivered: number; failed: number; pending: number; collected: Dec };
+    crates?: { withCustomers: number; customersHolding: number; withPeople: number };
+    money?: { cashOnHand: Dec; inBank: Dec; pendingSettlement: { cash: Dec; digital: Dec; people: number }; supplierPayables: { amount: Dec; count: number } };
+  };
 }
 
 export interface ProfitRow {
@@ -912,4 +919,98 @@ export interface ReceiptPrintRow {
   channel: 'WEB' | 'BLUETOOTH';
   printedAt: string;
   printedBy: { fullName: string };
+}
+
+// ── Reportes de la operación (fase M) ──────────────────────
+
+export interface SalesFilterValues {
+  branchId?: string;
+  categoryId?: string;
+  sellerId?: string;
+  customerId?: string;
+}
+
+export interface ReportOptions {
+  branches: { id: string; name: string }[];
+  categories: { id: string; name: string }[];
+  sellers: { id: string; name: string }[];
+  drivers: { id: string; name: string }[];
+  vehicles: { id: string; plate: string; description: string }[];
+  suppliers: { id: string; name: string }[];
+  customerTypes: { id: string; name: string }[];
+  customers: { id: string; name: string; code: string }[];
+}
+
+export interface LogisticsFigures {
+  routes: number;
+  stops: number;
+  delivered: number;
+  partial: number;
+  failed: number;
+  pending: number;
+  deliveryRate: Dec | null;
+  orderedKg: Dec;
+  deliveredKg: Dec;
+  soldAmount: Dec;
+  collected: Dec;
+  credit: Dec;
+}
+
+export interface LogisticsReport {
+  range: { from: string; to: string };
+  totals: LogisticsFigures & { cratesDelivered: number; cratesPickedUp: number };
+  byDriver: (LogisticsFigures & { id: string; name: string })[];
+  byVehicle: (LogisticsFigures & { id: string; plate: string })[];
+  byDay: (LogisticsFigures & { day: string })[];
+  problems: { problemType: string; count: number }[];
+}
+
+export interface CratesReport {
+  range: { from: string; to: string };
+  totals: { total: number; inWarehouses: number; inVehicles: number; withCustomers: number; withPeople: number; customersHolding: number; writtenOff: number; charged: Dec; shortages: number };
+  movements: { type: string; count: number; quantity: number; charged: Dec }[];
+  customers: { id: string; code: string; name: string; quantity: number; lastMovement: string | null; daysSinceMovement: number | null }[];
+  people: { id: string; name: string; role: string; quantity: number }[];
+}
+
+export interface BranchRow {
+  id: string;
+  name: string;
+  salesCount: number;
+  revenue: Dec;
+  cost: Dec;
+  margin: Dec;
+  marginPercentage: Dec;
+  kgSold: Dec;
+  credit: Dec;
+  transfersReceived: number;
+  transferredKg: Dec;
+  transitLossKg: Dec;
+  transitLoss: Dec;
+  lossKg: Dec;
+  lossAmount: Dec;
+  stockKg: Dec;
+  stockValue: Dec;
+}
+
+export interface BranchesReport {
+  range: { from: string; to: string };
+  totals: { revenue: Dec; margin: Dec; kgSold: Dec; stockKg: Dec };
+  rows: BranchRow[];
+}
+
+export interface PurchasesReport {
+  range: { from: string; to: string };
+  totals: { purchases: number; kg: Dec; amount: Dec; costPerKg: Dec; unpaid: Dec };
+  bySupplier: { id: string; name: string; purchases: number; kg: Dec; amount: Dec; costPerKg: Dec; shrinkagePercentage: Dec | null; unpaid: Dec; unpaidCount: number }[];
+  byProduct: { id: string; name: string; kg: Dec; amount: Dec; costPerKg: Dec; minCostPerKg: Dec; maxCostPerKg: Dec }[];
+  byDay: { day: string; amount: Dec; kg: Dec }[];
+}
+
+export interface CustomersReport {
+  range: { from: string; to: string };
+  totals: { active: number; newCustomers: number; lapsed: number; revenue: Dec; top5Percentage: Dec; walkInSales: number; walkInRevenue: Dec };
+  byType: { id: string; name: string; customers: number; revenue: Dec }[];
+  customers: { id: string; code: string; name: string; type: string; sales: number; revenue: Dec; kg: Dec; averageTicket: Dec; lastSale: string | null; debt: Dec; crates: number }[];
+  lapsed: { id: string; code: string; name: string; phone: string | null; lastSale: string; previousRevenue: Dec }[];
 }
