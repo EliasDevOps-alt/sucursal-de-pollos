@@ -19,8 +19,14 @@ export class LoginAttempts {
     return list;
   }
 
+  /** 0 (o menos) desactiva el freno: útil en demostraciones y pruebas locales. */
+  get enabled() {
+    return this.maxFailures > 0;
+  }
+
   /** Lanza 429 si la clave está bloqueada. */
   assertAllowed(key: string, now = Date.now()) {
+    if (!this.enabled) return;
     const list = this.recent(key, now);
     if (list.length >= this.maxFailures) {
       const minutes = Math.max(1, Math.ceil((list[0] + this.windowMs - now) / 60_000));
@@ -29,6 +35,7 @@ export class LoginAttempts {
   }
 
   fail(key: string, now = Date.now()) {
+    if (!this.enabled) return;
     this.failures.set(key, [...this.recent(key, now), now]);
   }
 
