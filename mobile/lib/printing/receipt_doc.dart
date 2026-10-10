@@ -139,7 +139,7 @@ class ReceiptDoc {
               for (final i in stop.items)
                 ReceiptLine(
                   i.productName,
-                  detail: 'Pedido ${fmtKg(i.orderedKg)} · entregado ${fmtKg(i.deliveredKg ?? 0)} × ${fmtBob(i.unitPrice)}/kg'
+                  detail: 'Pedido ${fmtOrdered(i.orderedKg, i.orderedCrates)} · entregado ${fmtKg(i.deliveredKg ?? 0)} × ${fmtBob(i.unitPrice)}/kg'
                       '${i.differenceReason != null ? ' (${i.differenceReason})' : ''}',
                   amount: fmtBob((i.deliveredKg ?? 0) * i.unitPrice),
                 ),

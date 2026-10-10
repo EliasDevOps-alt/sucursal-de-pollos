@@ -110,7 +110,7 @@ class StopScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('Pedido ${fmtKg(i.orderedKg)}'),
+                  Text('Pedido ${fmtOrdered(i.orderedKg, i.orderedCrates)}'),
                   if (i.deliveredKg != null) Text('Entregado ${fmtKg(i.deliveredKg!)}', style: const TextStyle(fontWeight: FontWeight.w600)),
                 ],
               ),

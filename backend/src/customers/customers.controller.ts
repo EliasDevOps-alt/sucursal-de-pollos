@@ -5,7 +5,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { PERMISSIONS } from '../auth/permissions';
 import { CustomersService } from './customers.service';
-import { AddressDto, CreateCustomerDto, UpdateCustomerDto } from './dto/customer.dto';
+import { AddressDto, CreateCustomerDto, UpdateCustomerDto, UpdateRankDto } from './dto/customer.dto';
 
 const { CUSTOMERS_VIEW, CUSTOMERS_MANAGE } = PERMISSIONS;
 
@@ -36,6 +36,19 @@ export class CustomersController {
     @Query('withDebt', new ParseBoolPipe({ optional: true })) withDebt?: boolean,
   ) {
     return this.customers.findAll(search, withDebt);
+  }
+
+  @Patch('customer-ranks/:id')
+  @RequirePermissions(PERMISSIONS.CUSTOMER_RANK_CHANGE)
+  updateRank(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateRankDto, @CurrentUser() user: AuthUser) {
+    return this.customers.updateRank(id, dto, user);
+  }
+
+  /** Clientes que ya cumplen las condiciones de un rango superior (compra promedio y antigüedad de la deuda). */
+  @Get('customers/rank-suggestions')
+  @RequirePermissions(PERMISSIONS.CUSTOMER_RANK_CHANGE)
+  rankSuggestions() {
+    return this.customers.rankSuggestions();
   }
 
   @Get('customers/:id')

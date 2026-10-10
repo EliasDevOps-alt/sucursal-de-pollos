@@ -86,7 +86,7 @@ Future<AppState> _seed() async {
   await db.replaceCatalog(
     products: [
       Product(id: 'p1', code: 'PE-GRA', name: 'Pollo entero granja', category: 'Pollo entero', referencePrice: 16.2, availableKg: 62),
-      Product(id: 'p2', code: 'PE-SOF', name: 'Pollo entero SOFIA', category: 'Pollo entero', referencePrice: 17.4, availableKg: 246),
+      Product(id: 'p2', code: 'PE-SOF', name: 'Pollo entero SOFIA', category: 'Pollo entero', referencePrice: 17.4, availableKg: 246, kgPerCrate: 22),
       Product(id: 'p3', code: 'DE-PEC', name: 'Pechuga', category: 'Despiece', referencePrice: null, availableKg: 0),
     ],
     customers: [
@@ -118,7 +118,7 @@ Future<AppState> _seed() async {
     notes: 'Entregar antes de las 9',
   );
   await db.setValue('company', jsonEncode({'name': 'Distribuidora de Pollos', 'nit': '1023456027', 'address': 'Av. Principal #100, Santa Cruz', 'phone': '3-3456789', 'footer': 'Gracias por su compra'}));
-  final state = AppState(db: db, location: _FixedLocation(), printer: PrinterService(transport: _FakePrinters()))
+  final state = AppState(db: db, location: _FixedLocation(), printer: PrinterService(transport: _FakePrinters()), clock: () => DateTime(2026, 10, 6, 10, 5))
     ..user = SessionUser(id: 'u1', username: 'preventista', fullName: 'Preventista Demo', roleName: 'Preventista', permissions: ['presales.create'])
     ..deviceUuid = '3f2a9c1e-0000-4000-8000-000000000000'
     ..online = false
@@ -131,8 +131,8 @@ Future<AppState> _seed() async {
 Future<AppState> _seedDriver() async {
   final s = await _seed();
   final db = s.db;
-  StopItem item(String id, String name, double kg, double price, {double? delivered, String? reason}) =>
-      StopItem(productId: id, productName: name, orderedKg: kg, unitPrice: price, deliveredKg: delivered, differenceReason: reason);
+  StopItem item(String id, String name, double kg, double price, {double? delivered, String? reason, int crates = 0}) =>
+      StopItem(productId: id, productName: name, orderedKg: kg, unitPrice: price, deliveredKg: delivered, differenceReason: reason, orderedCrates: crates);
   await db.saveRoute(DeliveryRoute(
     id: 'r1',
     number: 'RT-000024',
@@ -154,7 +154,7 @@ Future<AppState> _seedDriver() async {
           receivedByName: 'Rosa Mamani', paidAmount: 0, signed: true, syncState: SyncState.pending),
       RouteStop(id: 's4', sequence: 4, status: 'PENDING', presaleId: 'x7', presaleNumber: 'P-000098', customerId: 'c1', customerName: 'Pollería Doña Juana',
           customerPhone: '70812345', address: Address(id: 'a1', label: 'Puesto', address: 'Mercado Central #12', latitude: -17.78, longitude: -63.18), presaleTotal: 566.82,
-          items: [item('p2', 'Pollo entero SOFIA', 20, 17.4), item('p1', 'Pollo entero granja', 14, 16.2)]),
+          items: [item('p2', 'Pollo entero SOFIA', 20, 17.4, crates: 1), item('p1', 'Pollo entero granja', 14, 16.2)]),
     ],
   ));
   s.user = SessionUser(id: 'u2', username: 'chofer', fullName: 'Chofer Demo', roleName: 'Chofer', permissions: ['deliveries.register', 'sync.push']);
@@ -182,9 +182,9 @@ Future<AppState> _seedCollector() async {
     customerTypes: await db.customerTypes(),
   );
   await db.saveCollection(Collection(id: 'k1', customerId: 'c2', customerName: 'Tienda Don Pedro', amount: 200, paymentMethod: 'EFECTIVO',
-      collectedAt: DateTime(now.year, now.month, now.day, 9, 40), receiptNumber: 'R-000041', paidByName: 'Pedro Rojas', cratesPickedUp: 2));
+      collectedAt: DateTime(2026, 10, 6, 9, 40), receiptNumber: 'R-000041', paidByName: 'Pedro Rojas', cratesPickedUp: 2));
   await db.saveCollection(Collection(id: 'k2', customerId: 'c4', customerName: 'Minimarket La Esquina', amount: 150, paymentMethod: 'QR',
-      collectedAt: DateTime(now.year, now.month, now.day, 10, 15), syncState: SyncState.pending));
+      collectedAt: DateTime(2026, 10, 6, 10, 15), syncState: SyncState.pending));
   s.user = SessionUser(id: 'u3', username: 'cobrador', fullName: 'Cobrador Demo', roleName: 'Cobrador', permissions: ['collections.create', 'sync.push']);
   await s.reload();
   return s;
@@ -246,6 +246,18 @@ void main() {
         await t.tap(find.text('Pollo entero granja'));
         await t.pumpAndSettle();
         await t.enterText(find.widgetWithText(TextField, 'Kg'), '80');
+        await t.pumpAndSettle();
+      }));
+  testWidgets('pedido por canastillo', (t) => shot(t, 'pedido_canastillo', (_) => const PresaleFormScreen(), act: (t) async {
+        await t.tap(find.text('Elegir cliente'));
+        await t.pumpAndSettle();
+        await t.tap(find.text('Pollería Doña Juana'));
+        await t.pumpAndSettle();
+        await t.tap(find.text('Agregar producto'));
+        await t.pumpAndSettle();
+        await t.tap(find.text('Pollo entero SOFIA'));
+        await t.pumpAndSettle();
+        await t.enterText(find.widgetWithText(TextField, 'Canastillos'), '3');
         await t.pumpAndSettle();
       }));
   testWidgets('ficha de cliente', (t) => shot(t, 'ficha_cliente', (_) => const CustomerDetailScreen(customerId: 'c1')));

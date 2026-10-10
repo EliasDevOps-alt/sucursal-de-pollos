@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseBoolPipe, ParseEnumPipe, ParseIntPipe, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseBoolPipe, ParseEnumPipe, ParseIntPipe, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { LotStatus } from '@prisma/client';
 import { AuthUser } from '../auth/auth-user';
@@ -41,5 +41,12 @@ export class LotsController {
   @RequirePermissions(PERMISSIONS.PRICE_CONFIGURE)
   setPrice(@Param('id', ParseUUIDPipe) id: string, @Body() dto: SetLotPriceDto, @CurrentUser() user: AuthUser) {
     return this.lots.setPrice(id, dto, user.id);
+  }
+
+  /** Quita el precio propio de una sucursal: vuelve a vender ese lote al precio central. */
+  @Delete(':id/prices/branches/:branchId')
+  @RequirePermissions(PERMISSIONS.PRICE_CONFIGURE)
+  clearBranchPrice(@Param('id', ParseUUIDPipe) id: string, @Param('branchId', ParseUUIDPipe) branchId: string, @CurrentUser() user: AuthUser) {
+    return this.lots.clearBranchPrice(id, branchId, user.id);
   }
 }

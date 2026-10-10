@@ -131,6 +131,7 @@ export function SaleDetailPage() {
                         </Table.Td>
                         <Table.Td ta="right" fw={600}>
                           {fmtKg(item.requestedWeightKg)}
+                          {item.crates > 0 && <Text size="xs" c="dimmed">{item.crates} {item.crates === 1 ? 'canastillo' : 'canastillos'}</Text>}
                           {Number(item.returnedWeightKg) > 0 && <Text size="xs" c="grape">devuelto {fmtKg(item.returnedWeightKg)}</Text>}
                         </Table.Td>
                         <Table.Td ta="right">{fmtPerKg(item.unitPrice)}</Table.Td>

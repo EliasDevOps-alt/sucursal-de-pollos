@@ -152,7 +152,7 @@ class _MyCollectionsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
-    final today = DateTime.now();
+    final today = s.now();
     final valid = s.collections.where((c) => c.status == 'VALID' && c.syncState != SyncState.error).toList();
     final ofToday = valid.where((c) => c.collectedAt.year == today.year && c.collectedAt.month == today.month && c.collectedAt.day == today.day).toList();
     final byMethod = <String, double>{};

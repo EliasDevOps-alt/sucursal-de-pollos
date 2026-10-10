@@ -71,7 +71,7 @@ class PresaleDetailScreen extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(i.productName),
-              subtitle: Text('${fmtKg(i.weightKg)}${i.quantity != null ? ' · ${i.quantity} u.' : ''} × ${fmtBob(i.unitPrice)}/kg'),
+              subtitle: Text('${i.crates > 0 ? '${i.crates} canast. · ≈ ' : ''}${fmtKg(i.weightKg)}${i.quantity != null ? ' · ${i.quantity} u.' : ''} × ${fmtBob(i.unitPrice)}/kg'),
               trailing: Text(fmtBob(i.subtotal)),
             ),
           const Divider(),

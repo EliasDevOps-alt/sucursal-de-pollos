@@ -92,6 +92,13 @@ Los datos de demostración dejan una ruta **en curso** de hoy, con la mitad de l
 3. **Comprobantes** (panel): cada impresión con original o copia, quién la hizo y si fue por la web o por Bluetooth; **Ver / reimprimir**.
 4. **Catálogos → Datos del negocio**: cambiar el teléfono y mostrar que el siguiente comprobante ya lo trae.
 
+## 4f. Canastillos, precios por sucursal y rangos (4 min) — `admin` + teléfono
+
+1. **Ventas → Nueva venta** a un mayorista: *Pollo entero* por **canastillo** (3 canastillos), corregir con el peso real; la nota dice «3 canastillos · 64,2 kg» y los canastillos quedan en el saldo del cliente (**Canastillos**).
+2. En el teléfono del **preventista**: un pedido de pollo entero por canastillo; después, en la ruta, el **chofer** ve «2 canastillos (44 kg)» y los canastillos ya vienen puestos al entregar.
+3. **Inventario → un lote de la sucursal**: el precio central y **Precios por sucursal** (fijar uno más alto para la sucursal; **Quitar** vuelve al central).
+4. **Clientes**: el aviso de clientes que ya cumplen un rango superior → **Ascender** con el motivo que propone el sistema. Las condiciones están en **Catálogos → Rangos de cliente**.
+
 ## 5. Reportes y trazabilidad (6 min) — `admin`
 
 1. **Inicio**: la franja **Hoy** (reparto, efectivo, por rendir, canastillos con clientes) y las ventas del período; filtrar por sucursal o por **Reparto en ruta**.

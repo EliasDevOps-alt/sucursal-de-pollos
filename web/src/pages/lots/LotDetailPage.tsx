@@ -1,10 +1,10 @@
-import { Anchor, Badge, Button, Card, Group, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Anchor, Badge, Button, Card, Group, Modal, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { IconArrowLeft, IconTag } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { LotDetail } from '../../api/types';
+import type { LotDetail, Warehouse } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
@@ -38,6 +38,10 @@ export function LotDetailPage() {
   const [priceOpen, setPriceOpen] = useState(false);
   const [mode, setMode] = useState<'margin' | 'price'>('margin');
   const [value, setValue] = useState<number | string>(20);
+  // Ámbito del precio que se edita: null = central; si no, la sucursal.
+  const [scope, setScope] = useState<{ id: string; name: string } | null>(null);
+  const warehouses = useQuery({ queryKey: ['warehouses'], queryFn: async () => (await api.get<Warehouse[]>('/warehouses')).data });
+  const branches = (warehouses.data ?? []).filter((w) => w.type === 'BRANCH' && w.branch).map((w) => w.branch!);
 
   const { data: lot, isLoading, error } = useQuery({
     queryKey: ['lots', id],
@@ -46,16 +50,33 @@ export function LotDetailPage() {
 
   const setPrice = useMutation({
     mutationFn: async () =>
-      api.post(`/lots/${id}/prices`, mode === 'margin' ? { marginPercentage: Number(value) } : { pricePerKg: Number(value) }),
+      api.post(`/lots/${id}/prices`, { ...(mode === 'margin' ? { marginPercentage: Number(value) } : { pricePerKg: Number(value) }), branchId: scope?.id }),
     onSuccess: () => {
-      notifyOk('Precio actualizado');
+      notifyOk(scope ? `Precio de ${scope.name} actualizado` : 'Precio central actualizado');
       setPriceOpen(false);
       qc.invalidateQueries({ queryKey: ['lots'] });
     },
     onError: notifyError,
   });
 
+  const clearBranch = useMutation({
+    mutationFn: async (branchId: string) => api.delete(`/lots/${id}/prices/branches/${branchId}`),
+    onSuccess: () => {
+      notifyOk('La sucursal vuelve al precio central');
+      qc.invalidateQueries({ queryKey: ['lots'] });
+    },
+    onError: notifyError,
+  });
+
   const activePrice = lot?.prices.find((p) => p.isActive && !p.branch);
+  const branchPrice = (branchId: string) => lot?.prices.find((p) => p.isActive && p.branchId === branchId);
+  const scopePrice = scope ? branchPrice(scope.id) ?? activePrice : activePrice;
+  const openPrice = (s: { id: string; name: string } | null) => {
+    setScope(s);
+    setMode('price');
+    setValue(Number((s ? branchPrice(s.id) ?? activePrice : activePrice)?.pricePerKg ?? lot?.actualCostPerKg ?? 0));
+    setPriceOpen(true);
+  };
   const cost = Number(lot?.actualCostPerKg ?? 0);
   const previewPrice = mode === 'margin' ? cost * (1 + Number(value || 0) / 100) : Number(value || 0);
 
@@ -110,7 +131,7 @@ export function LotDetailPage() {
               <Group justify="space-between" mb="sm">
                 <Title order={5}>Costo y precio</Title>
                 {can('price.configure') && (
-                  <Button size="xs" variant="light" leftSection={<IconTag size={14} />} onClick={() => setPriceOpen(true)}>
+                  <Button size="xs" variant="light" leftSection={<IconTag size={14} />} onClick={() => openPrice(null)}>
                     Cambiar precio
                   </Button>
                 )}
@@ -122,6 +143,36 @@ export function LotDetailPage() {
                   {activePrice ? `${fmtPerKg(activePrice.pricePerKg)} · margen ${fmtPct(activePrice.marginPercentage)}` : '—'}
                 </Field>
               </Stack>
+              {branches.length > 0 && (
+                <>
+                  <Text size="sm" fw={600} mt="md" mb={4}>Precios por sucursal</Text>
+                  <Stack gap={6}>
+                    {branches.map((b) => {
+                      const own = branchPrice(b.id);
+                      return (
+                        <Group key={b.id} justify="space-between" gap="xs" wrap="nowrap">
+                          <div>
+                            <Text size="sm">{b.name}</Text>
+                            <Text size="xs" c="dimmed">
+                              {own ? `${fmtPerKg(own.pricePerKg)} · margen ${fmtPct(own.marginPercentage)}` : `usa el precio central${activePrice ? ` (${fmtPerKg(activePrice.pricePerKg)})` : ''}`}
+                            </Text>
+                          </div>
+                          {can('price.configure') && (
+                            <Group gap={4} wrap="nowrap">
+                              <Button size="compact-xs" variant="subtle" onClick={() => openPrice(b)}>{own ? 'Cambiar' : 'Fijar precio'}</Button>
+                              {own && (
+                                <Button size="compact-xs" variant="subtle" color="gray" loading={clearBranch.isPending && clearBranch.variables === b.id} onClick={() => clearBranch.mutate(b.id)}>
+                                  Quitar
+                                </Button>
+                              )}
+                            </Group>
+                          )}
+                        </Group>
+                      );
+                    })}
+                  </Stack>
+                </>
+              )}
             </Card>
           </SimpleGrid>
 
@@ -193,12 +244,29 @@ export function LotDetailPage() {
 
           <Modal opened={priceOpen} onClose={() => setPriceOpen(false)} title={`Precio del lote ${lot.lotCode}`}>
             <Stack>
-              <Text size="sm">Costo real: <b>{fmtPerKg(lot.actualCostPerKg)}</b></Text>
+              {branches.length > 0 && (
+                <Select
+                  label="Dónde rige"
+                  allowDeselect={false}
+                  value={scope?.id ?? 'central'}
+                  onChange={(v) => {
+                    const b = branches.find((x) => x.id === v) ?? null;
+                    setScope(b);
+                    setValue(Number((b ? branchPrice(b.id) ?? activePrice : activePrice)?.pricePerKg ?? cost));
+                    setMode('price');
+                  }}
+                  data={[{ value: 'central', label: 'Central (y sucursales sin precio propio)' }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+                />
+              )}
+              <Text size="sm">
+                Costo real: <b>{fmtPerKg(lot.actualCostPerKg)}</b>
+                {scopePrice && <> · vigente {fmtPerKg(scopePrice.pricePerKg)}{scope && !branchPrice(scope.id) ? ' (central)' : ''}</>}
+              </Text>
               <SegmentedControl
                 value={mode}
                 onChange={(v) => {
                   setMode(v as 'margin' | 'price');
-                  setValue(v === 'margin' ? 20 : Number(activePrice?.pricePerKg ?? cost));
+                  setValue(v === 'margin' ? 20 : Number(scopePrice?.pricePerKg ?? cost));
                 }}
                 data={[
                   { value: 'margin', label: 'Por margen %' },

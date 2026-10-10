@@ -136,6 +136,7 @@ export class MobileService {
           name: p.name,
           category: p.category.name,
           saleUnit: p.saleUnit,
+          kgPerCrate: p.kgPerCrate,
           referencePrice: s?.fefo_price ? D(s.fefo_price) : null,
           availableKg: s ? kg(D(s.available_kg)) : ZERO,
         };
@@ -221,7 +222,7 @@ export class MobileService {
       cancelReason: p.cancelReason,
       saleNumber: p.sale?.saleNumber ?? null,
       saleTotal: p.sale?.totalAmount ?? null,
-      items: p.items.map((i) => ({ productId: i.productId, productName: i.product.name, weightKg: i.weightKg, unitPrice: i.unitPrice, subtotal: i.subtotal })),
+      items: p.items.map((i) => ({ productId: i.productId, productName: i.product.name, weightKg: i.weightKg, quantity: i.quantity, crates: i.crates, unitPrice: i.unitPrice, subtotal: i.subtotal })),
     }));
   }
 
@@ -361,6 +362,7 @@ export class MobileService {
           productId: i.productId,
           weightKg: kg(D(i.weightKg)),
           quantity: D(i.quantity ?? 0),
+          crates: i.crates ?? 0,
           unitPrice: D(i.unitPrice),
           subtotal: money(D(i.weightKg).times(i.unitPrice)),
           notes: i.notes,
@@ -428,6 +430,7 @@ export class MobileService {
           productId: i.productId,
           weightKg: kg(D(i.weightKg)),
           quantity: D(i.quantity ?? 0),
+          crates: i.crates ?? 0,
           unitPrice: D(i.unitPrice),
           subtotal: money(D(i.weightKg).times(i.unitPrice)),
           notes: i.notes,

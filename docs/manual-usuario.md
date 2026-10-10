@@ -31,7 +31,9 @@ Reglas que valen para todos:
 - **Roles y permisos**: qué puede hacer cada rol. Cambiarlos con cuidado.
 - **Clientes → ficha → Rango y crédito**: rango (descuento) y límite de crédito. Las ventas que superan el límite piden la autorización de un supervisor.
 - **Clientes → ficha → Ajustar deuda**: el **saldo inicial** de lo que cada cliente ya debía al empezar, o una corrección con motivo (no mueve dinero).
-- **Productos**: precio por lote (central y sucursal), vida útil y stock mínimo.
+- **Productos**: vida útil, stock mínimo y **kg por canastillo** (si se vende también por canastillo).
+- **Inventario → un lote → Costo y precio**: precio central y, en **Precios por sucursal**, el precio propio de cada sucursal (**Fijar precio**, **Cambiar** o **Quitar** para volver al central).
+- **Clientes**: cuando aparece el aviso «… cumplen las condiciones para subir de rango», **Ver sugerencias → Ascender** (con motivo; puede subir también el límite de crédito). Las condiciones de cada rango se editan en **Catálogos → Rangos de cliente**.
 - **Catálogos**: categorías de producto, tipos de cliente y **Datos del negocio** (encabezado de los comprobantes).
 - **Auditoría**: quién hizo qué y cuándo, con los datos antes y después.
 
@@ -39,6 +41,7 @@ Reglas que valen para todos:
 
 1. Al empezar el turno: **Finanzas → Abrir caja** y contar el efectivo. Si no coincide con lo que dice el sistema, se registra la diferencia con su motivo.
 2. **Ventas → Nueva venta**: cliente (o venta rápida sin cliente), productos y kilos. El sistema toma los lotes más próximos a vencer (FEFO) y aplica el descuento del rango del cliente. Elegir la forma de pago: efectivo, QR, transferencia o a crédito (si el cliente lo tiene habilitado).
+   - **Por canastillo** (pollo entero al mayorista): ponga los canastillos; el sistema propone los kilos y usted pone **el peso real de la balanza**. Si el cliente se lleva los canastillos, quedan en su saldo hasta que los devuelva.
 3. **Nota de venta**: en el detalle de la venta, **Nota de venta** abre el ticket para la impresora térmica (80 o 58 mm) o para guardarlo en PDF. Reimprimir sale como «COPIA».
 4. **Devolución** (en el detalle de la venta): con la autorización de un supervisor. Lo que está en buen estado vuelve al mismo lote; lo dañado se descarta como pérdida.
 5. **Cobranza → Registrar cobro**: cuando un cliente viene a pagar su deuda. Se entrega el recibo impreso.
@@ -50,7 +53,7 @@ Reglas que valen para todos:
 
 1. Al iniciar el día, con señal: abrir la app para que se sincronice (clientes, productos con precio y stock del día).
 2. **Clientes**: buscar al cliente, ver su deuda y su crédito disponible. Clientes nuevos: alta en el momento, con la ubicación del local.
-3. **Nuevo pedido**: productos, kilos (o unidades) y fecha de entrega. Si no hay señal, el pedido queda «Sin enviar» y se envía solo después.
+3. **Nuevo pedido**: productos, kilos (o unidades) y fecha de entrega. En el pollo entero puede pedir **por canastillo**: ponga los canastillos y los kilos se calculan solos (estimados). Si no hay señal, el pedido queda «Sin enviar» y se envía solo después.
 4. Si el cliente no pidió nada, registrar la **visita** con el motivo (sin pedido, cerrado…).
 5. Pedidos aún no despachados se pueden **editar** o **cancelar** desde el detalle.
 6. **Estado y cuenta**: ver qué falta enviar. Si algo fue rechazado, el motivo aparece ahí.
@@ -58,7 +61,7 @@ Reglas que valen para todos:
 ## 4. Chofer (app)
 
 1. Antes de salir: la ruta del día aparece al sincronizar (después de que administración la despachó). Revisar la hoja de carga contra lo que se sube al vehículo.
-2. En cada parada: **Entregar**. Poner el peso real de cada producto (si difiere, elegir el motivo), los canastillos que deja y los vacíos que recoge, lo cobrado (todo, parcial o crédito) y la **firma** de quien recibe.
+2. En cada parada: **Entregar**. Poner el peso real de cada producto (si difiere, elegir el motivo), los canastillos que deja (si el pedido fue por canastillo ya vienen puestos) y los vacíos que recoge, lo cobrado (todo, parcial o crédito) y la **firma** de quien recibe.
 3. Al guardar aparece el **comprobante de entrega**: **Imprimir** en la impresora Bluetooth y dejárselo al cliente. Sin señal también imprime (sale como provisorio; el número de venta llega al sincronizar).
 4. Si no se pudo entregar: **No se pudo entregar** y el motivo (cerrado, rechazó, no tenía dinero…). El pedido vuelve a pendiente.
 5. Al volver: sincronizar, devolver sobrantes y canastillos, y **rendir el dinero** en caja (lo cobrado en efectivo se cuenta; los QR y transferencias ya están en el banco).

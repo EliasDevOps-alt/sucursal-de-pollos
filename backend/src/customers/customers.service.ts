@@ -6,7 +6,8 @@ import { PERMISSIONS } from '../auth/permissions';
 import { D, money } from '../common/decimal';
 import { SequenceService } from '../common/sequence.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AddressDto, CreateCustomerDto, UpdateCustomerDto } from './dto/customer.dto';
+import { AddressDto, CreateCustomerDto, UpdateCustomerDto, UpdateRankDto } from './dto/customer.dto';
+import { suggestRank } from './rank-suggestions';
 
 const listInclude = {
   customerType: { select: { id: true, name: true } },
@@ -33,7 +34,66 @@ export class CustomersService {
   }
 
   listRanks() {
-    return this.prisma.customerRank.findMany({ where: { isActive: true }, orderBy: { creditLimit: 'asc' } });
+    return this.prisma.customerRank.findMany({ where: { isActive: true }, orderBy: [{ minMonthlyPurchase: 'asc' }, { creditLimit: 'asc' }] });
+  }
+
+  async updateRank(id: string, dto: UpdateRankDto, actor: AuthUser) {
+    const before = await this.prisma.customerRank.findUnique({ where: { id } });
+    if (!before) throw new NotFoundException('Rango no encontrado');
+    const after = await this.prisma.customerRank.update({ where: { id }, data: dto });
+    const pick = (r: typeof before) => ({ discountPercentage: r.discountPercentage, creditLimit: r.creditLimit, minMonthlyPurchase: r.minMonthlyPurchase, maxDaysOverdue: r.maxDaysOverdue });
+    await this.audit.log({ userId: actor.id, action: 'customer_ranks.update', entityType: 'customer_rank', entityId: id, oldData: pick(before), newData: pick(after) });
+    return after;
+  }
+
+  /**
+   * Clientes que ya cumplen las condiciones de un rango superior: compra neta promedio de los últimos 90 días
+   * y antigüedad de su deuda. Solo sugiere; el cambio lo aprueba quien tiene permiso, con motivo (queda auditado).
+   */
+  async rankSuggestions() {
+    const DAYS = 90;
+    const ranks = await this.prisma.customerRank.findMany({ where: { isActive: true } });
+    const rows = await this.prisma.$queryRaw<
+      {
+        id: string; code: string; name: string; rank_id: string | null; current_debt: Prisma.Decimal; credit_limit: Prisma.Decimal;
+        purchases: Prisma.Decimal | null; sales: bigint; oldest_charge: Date | null;
+      }[]
+    >`
+      SELECT c.id, c.code, c.name, c.rank_id, c.current_debt, c.credit_limit,
+        (SELECT SUM(s.total_amount - s.returned_amount) FROM sales s
+          WHERE s.customer_id = c.id AND s.status IN ('CONFIRMED', 'RETURNED') AND s.created_at >= now() - make_interval(days => ${DAYS}::int)) AS purchases,
+        (SELECT COUNT(*) FROM sales s WHERE s.customer_id = c.id AND s.status = 'CONFIRMED' AND s.created_at >= now() - make_interval(days => ${DAYS}::int)) AS sales,
+        CASE WHEN c.current_debt > 0 THEN (SELECT MIN(rm.created_at) FROM receivable_movements rm
+          WHERE rm.customer_id = c.id AND rm.movement_type = 'CHARGE'
+            AND rm.created_at > COALESCE((SELECT MAX(z.created_at) FROM receivable_movements z WHERE z.customer_id = c.id AND z.balance_after <= 0), '-infinity'::timestamp))
+        END AS oldest_charge
+      FROM customers c WHERE c.status = 'ACTIVE'`;
+    const now = Date.now();
+    const fmt = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const bob = (v: Prisma.Decimal.Value) => `Bs ${fmt.format(Number(v))}`;
+    return rows
+      .map((r) => {
+        const monthlyAverage = money(D(r.purchases ?? 0).div(DAYS / 30));
+        const oldestDebtDays = r.oldest_charge ? Math.floor((now - r.oldest_charge.getTime()) / 86_400_000) : null;
+        const overLimit = D(r.credit_limit).gt(0) && D(r.current_debt).gt(r.credit_limit);
+        const suggested = suggestRank(ranks, { monthlyAverage, oldestDebtDays, overLimit, currentRankId: r.rank_id });
+        if (!suggested) return null;
+        const current = ranks.find((x) => x.id === r.rank_id) ?? null;
+        return {
+          customer: { id: r.id, code: r.code, name: r.name },
+          currentRank: current && { id: current.id, name: current.name },
+          suggestedRank: { id: suggested.id, name: suggested.name, discountPercentage: suggested.discountPercentage, creditLimit: suggested.creditLimit, minMonthlyPurchase: suggested.minMonthlyPurchase },
+          monthlyAverage,
+          sales: Number(r.sales),
+          oldestDebtDays,
+          currentCreditLimit: r.credit_limit,
+          reason:
+            `Compra promedio de ${bob(monthlyAverage)} por mes en los últimos ${DAYS} días (mínimo de ${suggested.name}: ${bob(suggested.minMonthlyPurchase)})` +
+            (oldestDebtDays === null ? ', sin deuda' : `, deuda más antigua de ${oldestDebtDays} días (máximo ${suggested.maxDaysOverdue})`),
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => b.monthlyAverage.comparedTo(a.monthlyAverage));
   }
 
   async findAll(search?: string, withDebt?: boolean) {

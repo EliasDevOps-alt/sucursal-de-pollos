@@ -4,15 +4,18 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsPositive,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -45,6 +48,13 @@ export class SaleLineDto {
   @IsNumber({ maxDecimalPlaces: 0 })
   @Min(0)
   quantity?: number;
+
+  @ApiPropertyOptional({ description: 'Venta por canastillo: cuántos lleva (solo productos con peso por canastillo; weightKg es el peso real)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(500)
+  crates?: number;
 
   @ApiPropertyOptional({ description: 'Precio final por kg si se modifica el sugerido' })
   @IsOptional()
@@ -105,6 +115,11 @@ export class CreateSaleDto {
   @IsOptional()
   @IsIn(SALE_PAYMENT_METHODS)
   paymentMethod?: (typeof SALE_PAYMENT_METHODS)[number];
+
+  @ApiPropertyOptional({ description: 'Venta por canastillo a un cliente registrado: los canastillos salen con él (por defecto sí)' })
+  @IsOptional()
+  @IsBoolean()
+  cratesToCustomer?: boolean;
 
   @ApiPropertyOptional({ description: 'Motivo para forzar lotes fuera del orden FEFO' })
   @IsOptional()

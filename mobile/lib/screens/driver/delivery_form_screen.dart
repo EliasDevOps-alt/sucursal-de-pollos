@@ -54,6 +54,8 @@ class _DeliveryFormScreenState extends State<DeliveryFormScreen> {
     _stop = s.routes.firstWhere((r) => r.id == widget.routeId).stops.firstWhere((x) => x.id == widget.stopId);
     _lines = _stop.items.map(_Line.new).toList();
     _customer = s.customers.where((c) => c.id == _stop.customerId).firstOrNull;
+    // Si se pidió por canastillo, se propone dejar esos canastillos (el chofer corrige si deja otros).
+    _cratesOut = _stop.items.fold(0, (t, i) => t + i.orderedCrates);
     _signature.addListener(() => setState(() {}));
   }
 
@@ -95,6 +97,7 @@ class _DeliveryFormScreenState extends State<DeliveryFormScreen> {
               productId: l.item.productId,
               productName: l.item.productName,
               orderedKg: l.item.orderedKg,
+              orderedCrates: l.item.orderedCrates,
               unitPrice: l.item.unitPrice,
               deliveredKg: double.parse(l.delivered.toStringAsFixed(3)),
               differenceReason: l.differs ? l.reason : null,
@@ -141,7 +144,7 @@ class _DeliveryFormScreenState extends State<DeliveryFormScreen> {
           for (final l in _lines) ...[
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: Text('${l.item.productName}\nPedido ${fmtKg(l.item.orderedKg)}')),
+              Expanded(child: Text('${l.item.productName}\nPedido ${fmtOrdered(l.item.orderedKg, l.item.orderedCrates)}')),
               SizedBox(
                 width: 120,
                 child: TextField(

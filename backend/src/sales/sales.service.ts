@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   PaymentRecordStatus,
+  CrateHolderType,
+  CrateMovementType,
   CustomerStatus,
   InventoryMovementType,
   PresaleStatus,
@@ -18,6 +20,7 @@ import { PERMISSIONS } from '../auth/permissions';
 import { D, kg, money, perKg, ZERO } from '../common/decimal';
 import { ReceivablesService } from '../common/receivables.service';
 import { SequenceService } from '../common/sequence.service';
+import { CratesService } from '../crates/crates.service';
 import { CashService } from '../finance/cash.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { availableLots } from '../inventory/lot-stock';
@@ -60,6 +63,7 @@ interface BuiltLine {
   productName: string;
   weightKg: Prisma.Decimal;
   quantity: Prisma.Decimal;
+  crates: number;
   allocations: PricedAllocation[];
   originalUnitPrice: Prisma.Decimal;
   unitPrice: Prisma.Decimal;
@@ -81,6 +85,7 @@ export class SalesService {
     private readonly auth: AuthService,
     private readonly receivables: ReceivablesService,
     private readonly cash: CashService,
+    private readonly crates: CratesService,
   ) {}
 
   // ── Consulta ────────────────────────────────────────────
@@ -235,6 +240,7 @@ export class SalesService {
           productId: line.productId,
           requestedWeightKg: line.weightKg,
           requestedQuantity: line.quantity,
+          crates: line.crates,
           originalUnitPrice: line.originalUnitPrice,
           unitPrice: line.unitPrice,
           discountAmount: line.discount,
@@ -316,6 +322,22 @@ export class SalesService {
       await tx.presale.update({ where: { id: dto.presaleId }, data: { status: PresaleStatus.DELIVERED, saleId: sale.id } });
     }
 
+    // Venta por canastillo en mostrador: los canastillos salen con el cliente y quedan en su saldo.
+    // (En el reparto los registra la entrega: canastillos que deja y que recoge.)
+    const crates = built.lines.reduce((t, l) => t + l.crates, 0);
+    if (crates > 0 && built.customer && !delivery && dto.cratesToCustomer !== false) {
+      await this.crates.move(tx, {
+        type: CrateMovementType.DELIVERY,
+        quantity: crates,
+        from: { type: CrateHolderType.WAREHOUSE, id: built.warehouse.id },
+        to: { type: CrateHolderType.CUSTOMER, id: built.customer.id },
+        referenceType: 'sale',
+        referenceId: sale.id,
+        reason: `Venta ${saleNumber}`,
+        actorId: actor.id,
+      });
+    }
+
     await this.audit.log(
       { userId: actor.id, action: 'sales.create', entityType: 'sale', entityId: sale.id, newData: { saleNumber, total: built.total, paymentStatus: built.paymentStatus, presaleId: dto.presaleId } },
       tx,
@@ -378,6 +400,20 @@ export class SalesService {
       }
       if (sale.customerId && D(sale.creditAmount).gt(0)) {
         await this.receivable(tx, sale.customerId, ReceivableMovementType.ANNUL, D(sale.creditAmount).negated(), sale.id, actor.id, reason);
+      }
+      // Los canastillos que salieron con la venta vuelven al almacén.
+      const crateMoves = await tx.crateMovement.findMany({ where: { referenceType: 'sale', referenceId: sale.id, type: CrateMovementType.DELIVERY } });
+      for (const m of crateMoves) {
+        await this.crates.move(tx, {
+          type: CrateMovementType.RETURN,
+          quantity: m.quantity,
+          from: { type: CrateHolderType.CUSTOMER, id: m.toId! },
+          to: { type: CrateHolderType.WAREHOUSE, id: m.fromId! },
+          referenceType: 'sale',
+          referenceId: sale.id,
+          reason: `Anulación de la venta ${sale.saleNumber}`,
+          actorId: actor.id,
+        });
       }
       // Lo cobrado se devuelve: sale de la caja donde entró (o deja de estar pendiente de rendir).
       const payments = await tx.payment.findMany({ where: { saleId: sale.id, status: PaymentRecordStatus.VALID } });
@@ -445,6 +481,7 @@ export class SalesService {
     for (const [idx, line] of dto.items.entries()) {
       const product = products.get(line.productId);
       if (!product) throw new BadRequestException(`Línea ${idx + 1}: producto inexistente o inactivo`);
+      if (line.crates && !product.kgPerCrate) throw new BadRequestException(`${product.name} no se vende por canastillo (no tiene peso por canastillo)`);
 
       const lots = (await availableLots(db, warehouse.id, product.id, lock)).map((l) => ({
         ...l,
@@ -500,6 +537,7 @@ export class SalesService {
         productName: product.name,
         weightKg: weight,
         quantity: D(line.quantity ?? 0),
+        crates: line.crates ?? 0,
         allocations: priced,
         originalUnitPrice,
         unitPrice,

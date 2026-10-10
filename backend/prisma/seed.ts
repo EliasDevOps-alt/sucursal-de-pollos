@@ -140,8 +140,8 @@ async function seedCatalogs() {
 
   const ranks = [
     { code: 'BRONCE', name: 'Bronce', discountPercentage: 0, creditLimit: 1000 },
-    { code: 'PLATA', name: 'Plata', discountPercentage: 2, creditLimit: 3000 },
-    { code: 'ORO', name: 'Oro', discountPercentage: 4, creditLimit: 8000 },
+    { code: 'PLATA', name: 'Plata', discountPercentage: 2, creditLimit: 3000, minMonthlyPurchase: 3000, maxDaysOverdue: 30 },
+    { code: 'ORO', name: 'Oro', discountPercentage: 4, creditLimit: 8000, minMonthlyPurchase: 8000, maxDaysOverdue: 15 },
   ];
   for (const r of ranks) {
     await prisma.customerRank.upsert({ where: { code: r.code }, update: {}, create: r });

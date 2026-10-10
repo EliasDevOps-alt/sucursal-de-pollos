@@ -12,6 +12,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { fmtBob, fmtPct } from '../../lib/format';
 import { notifyError, notifyOk } from '../../lib/notify';
+import { RankSuggestions } from './RankSuggestions';
 
 export function useCustomerCatalogs() {
   const types = useQuery({
@@ -98,6 +99,7 @@ export function CustomersPage() {
         subtitle="Tiendas, mercados, mayoristas y particulares"
         actions={can('customers.manage') && <Button leftSection={<IconPlus size={16} />} onClick={() => setCreating(true)}>Nuevo cliente</Button>}
       />
+      {canAdminCredit && <RankSuggestions />}
       <Group mb="sm" align="flex-end">
         <TextInput
           placeholder="Buscar por nombre, código, CI/NIT o teléfono"

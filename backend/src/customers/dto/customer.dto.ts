@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
   IsLatitude,
   IsLongitude,
   IsNotEmpty,
@@ -11,6 +12,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -95,4 +97,33 @@ export class UpdateCustomerDto extends PartialType(OmitType(CreateCustomerDto, [
   @IsOptional()
   @IsString()
   rankChangeReason?: string;
+}
+
+/** Condiciones y beneficios de un rango de cliente. */
+export class UpdateRankDto {
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(50)
+  discountPercentage?: number;
+
+  @ApiPropertyOptional({ example: 3000 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  creditLimit?: number;
+
+  @ApiPropertyOptional({ description: 'Compra promedio mensual (últimos 90 días) para sugerir el ascenso a este rango', example: 3000 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  minMonthlyPurchase?: number;
+
+  @ApiPropertyOptional({ description: 'Antigüedad máxima de la deuda (días) para sugerirlo', example: 30 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  maxDaysOverdue?: number;
 }

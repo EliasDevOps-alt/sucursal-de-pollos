@@ -157,6 +157,7 @@ export class ReceiptsService {
     });
     if (!s) throw new NotFoundException('Venta no encontrada');
     const charge = await this.prisma.receivableMovement.findFirst({ where: { referenceType: 'sale', referenceId: s.id, movementType: 'CHARGE' } });
+    const cratesOut = await this.prisma.crateMovement.aggregate({ where: { referenceType: 'sale', referenceId: s.id, type: 'DELIVERY' }, _sum: { quantity: true } });
     return {
       number: s.saleNumber,
       title: 'NOTA DE VENTA',
@@ -169,7 +170,7 @@ export class ReceiptsService {
       ],
       items: s.items.map((i) => ({
         description: i.product.name,
-        detail: `${fmtKg(i.requestedWeightKg)} × ${fmtBob(i.unitPrice)}/kg${D(i.discountAmount).gt(0) ? ` − desc. ${fmtBob(i.discountAmount)}` : ''}${D(i.returnedWeightKg).gt(0) ? ` (devuelto ${fmtKg(i.returnedWeightKg)})` : ''}`,
+        detail: `${i.crates ? `${i.crates} ${i.crates === 1 ? 'canastillo' : 'canastillos'} · ` : ''}${fmtKg(i.requestedWeightKg)} × ${fmtBob(i.unitPrice)}/kg${D(i.discountAmount).gt(0) ? ` − desc. ${fmtBob(i.discountAmount)}` : ''}${D(i.returnedWeightKg).gt(0) ? ` (devuelto ${fmtKg(i.returnedWeightKg)})` : ''}`,
         amount: fmtBob(i.subtotal),
       })),
       totals: [
@@ -182,6 +183,7 @@ export class ReceiptsService {
       extra: [
         ...s.payments.map((p) => ({ label: 'Forma de pago', value: `${METHODS[p.paymentMethod] ?? p.paymentMethod} ${fmtBob(p.amount)}` })),
         ...(charge ? [{ label: 'Saldo del cliente', value: fmtBob(charge.balanceAfter) }] : []),
+        ...(cratesOut._sum.quantity ? [{ label: 'Canastillos que lleva', value: `${cratesOut._sum.quantity} (a devolver)` }] : []),
       ],
       notice: s.status === 'ANNULLED' ? `ANULADA: ${s.annulReason ?? ''}` : s.status === 'RETURNED' ? 'DEVUELTA' : undefined,
     };
@@ -221,7 +223,7 @@ export class ReceiptsService {
             const line = saleLine(i.productId);
             return {
               description: i.product.name,
-              detail: `Pedido ${fmtKg(i.orderedWeightKg)} · entregado ${fmtKg(i.deliveredWeightKg ?? 0)}${line ? ` × ${fmtBob(line.unitPrice)}/kg` : ''}${i.differenceReason ? ` (${i.differenceReason})` : ''}`,
+              detail: `Pedido ${i.orderedCrates ? `${i.orderedCrates} canast. (${fmtKg(i.orderedWeightKg)})` : fmtKg(i.orderedWeightKg)} · entregado ${fmtKg(i.deliveredWeightKg ?? 0)}${line ? ` × ${fmtBob(line.unitPrice)}/kg` : ''}${i.differenceReason ? ` (${i.differenceReason})` : ''}`,
               amount: line ? fmtBob(line.subtotal) : undefined,
             };
           }),

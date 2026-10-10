@@ -165,6 +165,12 @@ const KG_BY_TYPE: Record<string, [number, number]> = {
   quick: [2, 12],
 };
 
+const KG_PER_CRATE = new Map<string, number>();
+/** Canastillos de una línea de pollo entero de 18 kg o más (los kilos siguen siendo el peso real). */
+const cratesFor = (productId: string, weightKg: number) => {
+  const per = KG_PER_CRATE.get(productId);
+  return per && weightKg >= 18 ? Math.max(1, Math.round(weightKg / per)) : undefined;
+};
 const stats = { purchases: 0, sales: 0, presales: 0, attended: 0, credit: 0, skippedLines: 0, transfers: 0, branchSales: 0, routes: 0, failedStops: 0, collections: 0, events: [] as string[] };
 // Las compras cubren también lo que se envía a la sucursal.
 const BRANCH_SUPPLY = 1.06;
@@ -210,6 +216,12 @@ async function main() {
   const central = warehouses.find((w) => w.code === 'ALM-CEN');
   const branchWh = warehouses.find((w) => w.code === 'ALM-SUC1');
   const byCode = Object.fromEntries(products.map((p) => [p.code, p]));
+  // El pollo entero se vende también por canastillo (≈ peso de uno lleno); mayoristas y mercados lo piden así.
+  for (const [code, kgPerCrate] of Object.entries({ 'PE-SOF': 22, 'PE-PIO': 22, 'PE-GRA': 20 })) {
+    if (!byCode[code]) continue;
+    await api('PATCH', `/products/${byCode[code].id}`, admin, { kgPerCrate });
+    KG_PER_CRATE.set(byCode[code].id, kgPerCrate);
+  }
   const supplierId = (name: string) => suppliers.find((s) => s.name === name)!.id;
 
   const today = localToday();
@@ -369,7 +381,10 @@ async function main() {
       const [lo, hi] = KG_BY_TYPE[typeOf(customer)];
       const items = codes
         .filter((c) => refPrice[byCode[c].id] !== null)
-        .map((c) => ({ productId: byCode[c].id, weightKg: r3(between(lo, hi) / codes.length), unitPrice: refPrice[byCode[c].id]! }));
+        .map((c) => {
+          const weightKg = r3(between(lo, hi) / codes.length);
+          return { productId: byCode[c].id, weightKg, crates: cratesFor(byCode[c].id, weightKg), unitPrice: refPrice[byCode[c].id]! };
+        });
       if (!items.length) continue;
       const id = randomUUID();
       const address = customer.addresses[0];
@@ -463,7 +478,9 @@ async function sell(token: string, o: { customer: any | null; items: { productId
     warehouseId: (await warehouseId()),
     customerId: o.customer?.id,
     presaleId: o.presaleId,
-    items: o.items,
+    // Clientes registrados con pedidos grandes de pollo entero: por canastillo (y a veces se llevan los canastillos).
+    items: o.items.map((i) => ({ ...i, crates: o.customer ? cratesFor(i.productId, i.weightKg) : undefined })),
+    cratesToCustomer: rand() < 0.6,
     paymentMethod: weighted([['EFECTIVO', 65], ['QR', 30], ['TRANSFERENCIA', 5]]),
   };
   const quote: any = await api('POST', '/sales/quote', token, base);

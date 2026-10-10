@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Divider,
   Grid,
   Group,
@@ -35,12 +36,14 @@ interface Line {
   key: string;
   productId: string | null;
   weightKg: number | '';
+  /** Venta por canastillo (solo productos con kg por canastillo); weightKg es el peso real de la balanza. */
+  crates: number | '';
   unitPrice: number | '';
   priceChangeReason: string;
   lots?: LotChoice[];
 }
 
-const newLine = (): Line => ({ key: crypto.randomUUID(), productId: null, weightKg: '', unitPrice: '', priceChangeReason: '' });
+const newLine = (): Line => ({ key: crypto.randomUUID(), productId: null, weightKg: '', crates: '', unitPrice: '', priceChangeReason: '' });
 
 export function SaleNewPage() {
   const { user, can } = useAuth();
@@ -74,7 +77,7 @@ export function SaleNewPage() {
     if (!p) return;
     setCustomerId(p.customer.id);
     setCustomerSearch(p.customer.name);
-    setLines(p.items.map((i) => ({ ...newLine(), productId: i.productId, weightKg: Number(i.weightKg) })));
+    setLines(p.items.map((i) => ({ ...newLine(), productId: i.productId, weightKg: Number(i.weightKg), crates: i.crates || '' })));
     setNotes(p.notes ? `Preventa ${p.presaleNumber}: ${p.notes}` : `Preventa ${p.presaleNumber}`);
   }, [presale.data]);
 
@@ -87,6 +90,11 @@ export function SaleNewPage() {
   const effectiveWarehouse = warehouseId ?? allowedWarehouses[0]?.id ?? null;
 
   const products = useQuery({ queryKey: ['products'], queryFn: async () => (await api.get<Product[]>('/products')).data });
+  const kgPerCrate = (id: string | null) => {
+    const v = products.data?.find((p) => p.id === id)?.kgPerCrate;
+    return v ? Number(v) : null;
+  };
+  const [cratesToCustomer, setCratesToCustomer] = useState(true);
   const [debouncedSearch] = useDebouncedValue(customerSearch, 300);
   const customers = useQuery({
     queryKey: ['customers', { debounced: debouncedSearch, withDebt: false }],
@@ -95,6 +103,7 @@ export function SaleNewPage() {
 
   // Memorizado: payload y la vista previa con debounce necesitan una referencia estable.
   const validLines = useMemo(() => lines.filter((l) => l.productId && Number(l.weightKg) > 0), [lines]);
+  const totalCrates = validLines.reduce((t, l) => t + (kgPerCrate(l.productId) ? Number(l.crates) || 0 : 0), 0);
 
   const payload = useMemo(() => {
     if (!effectiveWarehouse || validLines.length === 0) return null;
@@ -104,6 +113,7 @@ export function SaleNewPage() {
       items: validLines.map((l) => ({
         productId: l.productId!,
         weightKg: Number(l.weightKg),
+        crates: Number(l.crates) > 0 && kgPerCrate(l.productId) ? Number(l.crates) : undefined,
         unitPrice: l.unitPrice === '' ? undefined : Number(l.unitPrice),
         priceChangeReason: l.priceChangeReason.trim() || undefined,
         lots: l.lots,
@@ -113,8 +123,9 @@ export function SaleNewPage() {
       creditExceptionReason: creditReason.trim() || undefined,
       notes: notes.trim() || undefined,
       presaleId: presaleId ?? undefined,
+      cratesToCustomer: customerId ? cratesToCustomer : undefined,
     };
-  }, [effectiveWarehouse, customerId, validLines, paymentMethod, forceReason, creditReason, notes, presaleId]);
+  }, [effectiveWarehouse, customerId, validLines, paymentMethod, forceReason, creditReason, notes, presaleId, cratesToCustomer, products.data]);
 
   // La vista previa se pide sin el pago para conocer el total; el pago se agrega después.
   const [debouncedPayload] = useDebouncedValue(payload, 350);
@@ -235,9 +246,29 @@ export function SaleNewPage() {
                               searchable
                               placeholder="Producto"
                               value={l.productId}
-                              onChange={(v) => updateLine(l.key, { productId: v, lots: undefined, unitPrice: '' })}
+                              onChange={(v) => updateLine(l.key, { productId: v, lots: undefined, unitPrice: '', crates: '' })}
                               data={(products.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
                             />
+                            {kgPerCrate(l.productId) && (
+                              <Group gap={6} mt={6} wrap="nowrap">
+                                <NumberInput
+                                  size="xs"
+                                  w={110}
+                                  min={0}
+                                  max={500}
+                                  allowDecimal={false}
+                                  placeholder="Canastillos"
+                                  aria-label="Canastillos"
+                                  value={l.crates}
+                                  onChange={(v) => {
+                                    const n = Number(v) || 0;
+                                    // Propone el peso (canastillos × peso aproximado); se corrige con el de la balanza.
+                                    updateLine(l.key, { crates: v as number | '', weightKg: n > 0 ? Math.round(n * kgPerCrate(l.productId)! * 1000) / 1000 : l.weightKg, lots: undefined });
+                                  }}
+                                />
+                                <Text size="xs" c="dimmed">canastillos · ≈ {fmtKg(kgPerCrate(l.productId)!)} c/u; ponga el peso real</Text>
+                              </Group>
+                            )}
                             {priceChanged && (
                               <TextInput
                                 mt={6}
@@ -337,6 +368,13 @@ export function SaleNewPage() {
                     </Text>
                   )}
 
+                  {customerId && totalCrates > 0 && (
+                    <Checkbox
+                      label={`El cliente se lleva los ${totalCrates} canastillos (quedan en su saldo hasta que los devuelva)`}
+                      checked={cratesToCustomer}
+                      onChange={(e) => setCratesToCustomer(e.currentTarget.checked)}
+                    />
+                  )}
                   <Divider label="Pago" labelPosition="left" />
                   <SegmentedControl
                     fullWidth

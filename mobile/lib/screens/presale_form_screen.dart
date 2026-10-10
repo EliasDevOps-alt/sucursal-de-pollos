@@ -9,15 +9,25 @@ import 'customer_form_screen.dart';
 import 'format.dart';
 
 class _Line {
-  _Line(this.product, {this.quotedPrice, double? weight, int? units})
+  _Line(this.product, {this.quotedPrice, double? weight, int? units, int crates = 0})
       : kg = TextEditingController(text: weight == null ? '' : _num(weight)),
-        units = TextEditingController(text: units?.toString() ?? '');
+        units = TextEditingController(text: units?.toString() ?? ''),
+        crates = TextEditingController(text: crates > 0 ? '$crates' : '');
   final Product product;
   /// Precio cotizado al tomar el pedido; al editar se conserva para no cambiar la cotización sin aviso.
   final double? quotedPrice;
   final TextEditingController kg;
   final TextEditingController units;
+  /// Pedido por canastillo (solo productos con peso por canastillo); los kilos quedan como estimación.
+  final TextEditingController crates;
+  bool get byCrate => product.kgPerCrate != null;
+  int get crateCount => byCrate ? int.tryParse(crates.text) ?? 0 : 0;
   double get weight => double.tryParse(kg.text.replaceAll(',', '.')) ?? 0;
+
+  /// Al cambiar los canastillos se estiman los kilos (canastillos × peso aproximado de uno lleno).
+  void cratesChanged() {
+    if (crateCount > 0) kg.text = _num(double.parse((crateCount * product.kgPerCrate!).toStringAsFixed(3)));
+  }
   double get price => quotedPrice ?? product.referencePrice ?? 0;
 
   static String _num(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString().replaceAll('.', ',');
@@ -40,7 +50,7 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
   Customer? _customer;
   Address? _address;
   final List<_Line> _lines = [];
-  DateTime _delivery = DateTime.now().add(const Duration(days: 1));
+  late DateTime _delivery = context.read<AppState>().now().add(const Duration(days: 1));
   final _notes = TextEditingController();
   bool _saving = false;
 
@@ -62,7 +72,7 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
       for (final i in e.items) {
         final product = s.products.where((p) => p.id == i.productId).firstOrNull ??
             Product(id: i.productId, code: '', name: i.productName, category: '', referencePrice: i.unitPrice, availableKg: 0);
-        _lines.add(_Line(product, quotedPrice: i.unitPrice, weight: i.weightKg, units: i.quantity));
+        _lines.add(_Line(product, quotedPrice: i.unitPrice, weight: i.weightKg, units: i.quantity, crates: i.crates));
       }
     } else if (widget.initialCustomer != null) {
       _customer = widget.initialCustomer;
@@ -94,7 +104,13 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
     setState(() => _saving = true);
     final s = context.read<AppState>();
     final items = valid
-        .map((l) => PresaleItem(productId: l.product.id, productName: l.product.name, weightKg: l.weight, unitPrice: l.price, quantity: int.tryParse(l.units.text)))
+        .map((l) => PresaleItem(
+            productId: l.product.id,
+            productName: l.product.name,
+            weightKg: l.weight,
+            unitPrice: l.price,
+            quantity: l.byCrate ? null : int.tryParse(l.units.text),
+            crates: l.crateCount))
         .toList();
     if (_isEdit) {
       await s.updatePresale(widget.editing!,
@@ -170,7 +186,7 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
                     Text(
                       l.product.referencePrice == null
                           ? 'Sin precio de referencia (sin stock)'
-                          : '${fmtBob(l.price)}/kg · disponible ${fmtKg(l.product.availableKg)}',
+                          : '${fmtBob(l.price)}/kg · disponible ${fmtKg(l.product.availableKg)}${l.byCrate ? ' · canastillo ≈ ${fmtKg(l.product.kgPerCrate!)}' : ''}',
                       style: TextStyle(color: l.product.availableKg <= 0 ? cs.error : null, fontSize: 12),
                     ),
                     const SizedBox(height: 8),
@@ -186,12 +202,20 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: TextField(
-                          controller: l.units,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          decoration: const InputDecoration(labelText: 'Unidades', border: OutlineInputBorder(), isDense: true),
-                        ),
+                        child: l.byCrate
+                            ? TextField(
+                                controller: l.crates,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(labelText: 'Canastillos', border: OutlineInputBorder(), isDense: true),
+                                onChanged: (_) => setState(l.cratesChanged),
+                              )
+                            : TextField(
+                                controller: l.units,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(labelText: 'Unidades', border: OutlineInputBorder(), isDense: true),
+                              ),
                       ),
                       const SizedBox(width: 8),
                       SizedBox(width: 92, child: Text(fmtBob(l.weight * l.price), textAlign: TextAlign.right)),
@@ -214,7 +238,8 @@ class _PresaleFormScreenState extends State<PresaleFormScreen> {
             title: const Text('Entrega programada'),
             subtitle: Text(DateFormat("EEEE d 'de' MMMM", 'es').format(_delivery)),
             onTap: () async {
-              final d = await showDatePicker(context: context, initialDate: _delivery, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 30)));
+              final today = context.read<AppState>().now();
+              final d = await showDatePicker(context: context, initialDate: _delivery, firstDate: today, lastDate: today.add(const Duration(days: 30)));
               if (d != null) setState(() => _delivery = d);
             },
           ),

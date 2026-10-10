@@ -290,7 +290,7 @@ export class RoutesService {
       if (!stop.items.some((i) => i.productId === productId)) throw new BadRequestException('Un producto entregado no está en el pedido');
     }
     let anyDifference = false;
-    const lines: { productId: string; weightKg: number }[] = [];
+    const lines: { productId: string; weightKg: number; crates?: number }[] = [];
     for (const item of stop.items) {
       const got = byProduct.get(item.productId);
       const delivered = kg(D(got?.deliveredWeightKg ?? 0));
@@ -301,7 +301,8 @@ export class RoutesService {
           throw new BadRequestException(`${item.product.name}: se pidió ${D(item.orderedWeightKg).toFixed(3)} kg y se entrega ${delivered.toFixed(3)} kg; indique el motivo de la diferencia`);
         }
       }
-      if (delivered.gt(0)) lines.push({ productId: item.productId, weightKg: delivered.toNumber() });
+      // Los canastillos del pedido quedan como dato de la línea; los que se dejan de verdad los cuenta el chofer.
+      if (delivered.gt(0)) lines.push({ productId: item.productId, weightKg: delivered.toNumber(), crates: item.product.kgPerCrate ? item.orderedCrates || undefined : undefined });
     }
     if (!lines.length) throw new BadRequestException('No se entregó nada: registre la parada como no entregada, con su motivo');
 
@@ -538,7 +539,7 @@ export class RoutesService {
     }
     const stop = await tx.routeStop.findUniqueOrThrow({
       where: { id: stopId },
-      include: { items: { include: { product: { select: { name: true } } } }, creditAuthorizedBy: userRef },
+      include: { items: { include: { product: { select: { name: true, kgPerCrate: true } } } }, creditAuthorizedBy: userRef },
     });
     if (stop.status !== StopStatus.PENDING) throw new ConflictException('Esta parada ya fue registrada');
     return { stop, route };
@@ -596,7 +597,7 @@ export class RoutesService {
           creditAuthorizedById: s.authorizeCredit ? actor.id : null,
           creditAuthReason: s.authorizeCredit ? s.creditReason!.trim() : null,
           items: {
-            create: presale.items.map((i) => ({ productId: i.productId, orderedWeightKg: i.weightKg, orderedQuantity: i.quantity })),
+            create: presale.items.map((i) => ({ productId: i.productId, orderedWeightKg: i.weightKg, orderedQuantity: i.quantity, orderedCrates: i.crates })),
           },
         },
       });

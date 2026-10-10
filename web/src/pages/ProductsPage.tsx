@@ -18,10 +18,11 @@ interface FormValues {
   categoryId: string;
   saleUnit: Product['saleUnit'];
   minStockKg: number | '';
+  kgPerCrate: number | '';
   isActive: boolean;
 }
 
-const empty: FormValues = { code: '', name: '', brand: '', categoryId: '', saleUnit: 'KG', minStockKg: 0, isActive: true };
+const empty: FormValues = { code: '', name: '', brand: '', categoryId: '', saleUnit: 'KG', minStockKg: 0, kgPerCrate: '', isActive: true };
 
 const UNIT_OPTIONS = [
   { value: 'KG', label: 'Kilogramo' },
@@ -55,7 +56,7 @@ export function ProductsPage() {
 
   const save = useMutation({
     mutationFn: async (values: FormValues) => {
-      const body = { ...values, brand: values.brand || undefined, minStockKg: Number(values.minStockKg || 0) };
+      const body = { ...values, brand: values.brand || undefined, minStockKg: Number(values.minStockKg || 0), kgPerCrate: values.kgPerCrate ? Number(values.kgPerCrate) : null };
       if (editing === 'new') {
         const { isActive: _ignored, ...create } = body;
         return api.post('/products', create);
@@ -74,7 +75,7 @@ export function ProductsPage() {
     form.setValues(
       p === 'new'
         ? empty
-        : { code: p.code, name: p.name, brand: p.brand ?? '', categoryId: p.categoryId, saleUnit: p.saleUnit, minStockKg: Number(p.minStockKg), isActive: p.isActive },
+        : { code: p.code, name: p.name, brand: p.brand ?? '', categoryId: p.categoryId, saleUnit: p.saleUnit, minStockKg: Number(p.minStockKg), kgPerCrate: p.kgPerCrate ? Number(p.kgPerCrate) : '', isActive: p.isActive },
     );
     setEditing(p);
   };
@@ -109,7 +110,10 @@ export function ProductsPage() {
                     <Table.Td fw={500}>{p.name}</Table.Td>
                     <Table.Td>{p.brand ?? '—'}</Table.Td>
                     <Table.Td>{p.category.name}</Table.Td>
-                    <Table.Td>{UNIT_OPTIONS.find((u) => u.value === p.saleUnit)?.label}</Table.Td>
+                    <Table.Td>
+                      {UNIT_OPTIONS.find((u) => u.value === p.saleUnit)?.label}
+                      {p.kgPerCrate && <Badge ml={6} size="xs" variant="light" style={{ minWidth: 'max-content' }}>canastillo ≈ {fmtKg(p.kgPerCrate)}</Badge>}
+                    </Table.Td>
                     <Table.Td ta="right">{Number(p.minStockKg) > 0 ? fmtKg(p.minStockKg) : '—'}</Table.Td>
                     <Table.Td>
                       <Badge variant="light" color={p.isActive ? 'green' : 'gray'}>{p.isActive ? 'Activo' : 'Inactivo'}</Badge>
@@ -152,6 +156,14 @@ export function ProductsPage() {
               min={0}
               decimalScale={3}
               {...form.getInputProps('minStockKg')}
+            />
+            <NumberInput
+              label="Kg por canastillo"
+              description="Si se vende también por canastillo: peso aproximado de uno lleno (al vender se usa el peso real de la balanza). Vacío = solo por kilo"
+              min={0}
+              decimalScale={3}
+              placeholder="Ej.: 22"
+              {...form.getInputProps('kgPerCrate')}
             />
             {editing !== 'new' && <Switch label="Activo" {...form.getInputProps('isActive', { type: 'checkbox' })} />}
             <Button type="submit" loading={save.isPending}>Guardar</Button>

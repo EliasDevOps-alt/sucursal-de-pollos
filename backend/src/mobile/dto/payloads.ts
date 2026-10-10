@@ -81,6 +81,12 @@ export class PresaleItemPayload {
   @Min(0)
   quantity?: number;
 
+  /** Pedido por canastillo (weightKg es el peso estimado). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  crates?: number;
+
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   unitPrice: number;

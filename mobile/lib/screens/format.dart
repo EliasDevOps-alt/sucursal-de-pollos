@@ -7,6 +7,9 @@ final _kg = NumberFormat.decimalPattern('es');
 
 String fmtBob(num v) => 'Bs ${_bob.format(v)}';
 String fmtKg(num v) => '${_kg.format(v)} kg';
+
+/// Cantidad pedida: "2 canastillos (44 kg)" si se pidió por canastillo, si no "44 kg".
+String fmtOrdered(double kg, int crates) => crates > 0 ? '$crates ${crates == 1 ? 'canastillo' : 'canastillos'} (${fmtKg(kg)})' : fmtKg(kg);
 String fmtDateTime(DateTime d) => DateFormat('dd/MM/yy HH:mm', 'es').format(d);
 String fmtDate(String isoDate) => DateFormat('EEE dd/MM', 'es').format(DateTime.parse(isoDate));
 

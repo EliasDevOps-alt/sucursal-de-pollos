@@ -12,6 +12,7 @@ class Product {
     required this.category,
     required this.referencePrice,
     required this.availableKg,
+    this.kgPerCrate,
   });
 
   final String id;
@@ -20,6 +21,8 @@ class Product {
   final String category;
   final double? referencePrice;
   final double availableKg;
+  /// Si tiene valor, el producto se pide también por canastillo (peso aproximado de uno lleno).
+  final double? kgPerCrate;
 
   factory Product.fromJson(Map<String, dynamic> j) => Product(
         id: j['id'] as String,
@@ -28,6 +31,7 @@ class Product {
         category: (j['category'] ?? '') as String,
         referencePrice: toDoubleOrNull(j['referencePrice']),
         availableKg: toDouble(j['availableKg']),
+        kgPerCrate: toDoubleOrNull(j['kgPerCrate']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -37,6 +41,7 @@ class Product {
         'category': category,
         'referencePrice': referencePrice,
         'availableKg': availableKg,
+        'kgPerCrate': kgPerCrate,
       };
 }
 
@@ -177,12 +182,13 @@ class Customer {
 }
 
 class PresaleItem {
-  PresaleItem({required this.productId, required this.productName, required this.weightKg, required this.unitPrice, this.quantity});
+  PresaleItem({required this.productId, required this.productName, required this.weightKg, required this.unitPrice, this.quantity, this.crates = 0});
 
   final String productId;
   final String productName;
-  final double weightKg;
+  final double weightKg; // con canastillos, el peso estimado
   final int? quantity;
+  final int crates; // pedido por canastillo
   final double unitPrice;
 
   double get subtotal => (weightKg * unitPrice * 100).roundToDouble() / 100;
@@ -191,12 +197,13 @@ class PresaleItem {
         productId: j['productId'] as String,
         productName: (j['productName'] ?? '') as String,
         weightKg: toDouble(j['weightKg']),
-        quantity: j['quantity'] == null ? null : toDouble(j['quantity']).round(),
+        quantity: j['quantity'] == null || toDouble(j['quantity']) == 0 ? null : toDouble(j['quantity']).round(),
+        crates: (j['crates'] as num?)?.toInt() ?? 0,
         unitPrice: toDouble(j['unitPrice']),
       );
 
   Map<String, dynamic> toJson() =>
-      {'productId': productId, 'productName': productName, 'weightKg': weightKg, 'quantity': quantity, 'unitPrice': unitPrice};
+      {'productId': productId, 'productName': productName, 'weightKg': weightKg, 'quantity': quantity, 'crates': crates, 'unitPrice': unitPrice};
 }
 
 /// Estado de sincronización del pedido en el teléfono.
@@ -380,11 +387,12 @@ class SessionUser {
 // ── Chofer: rutas de entrega ─────────────────────────────
 
 class StopItem {
-  StopItem({required this.productId, required this.productName, required this.orderedKg, required this.unitPrice, this.deliveredKg, this.differenceReason});
+  StopItem({required this.productId, required this.productName, required this.orderedKg, required this.unitPrice, this.deliveredKg, this.differenceReason, this.orderedCrates = 0});
 
   final String productId;
   final String productName;
   final double orderedKg;
+  final int orderedCrates; // pedido por canastillo
   final double unitPrice; // precio cotizado en la preventa (para estimar el cobro sin conexión)
   final double? deliveredKg;
   final String? differenceReason;
@@ -396,12 +404,14 @@ class StopItem {
         unitPrice: toDouble(j['unitPrice']),
         deliveredKg: toDoubleOrNull(j['deliveredKg']),
         differenceReason: j['differenceReason'] as String?,
+        orderedCrates: (j['orderedCrates'] as num?)?.toInt() ?? 0,
       );
 
   Map<String, dynamic> toJson() => {
         'productId': productId,
         'productName': productName,
         'orderedKg': orderedKg,
+        'orderedCrates': orderedCrates,
         'unitPrice': unitPrice,
         'deliveredKg': deliveredKg,
         'differenceReason': differenceReason,
@@ -483,6 +493,7 @@ class RouteStop {
           productId: product['id'] as String,
           productName: product['name'] as String,
           orderedKg: toDouble(i['orderedWeightKg']),
+          orderedCrates: (i['orderedCrates'] as num?)?.toInt() ?? 0,
           unitPrice: prices[product['id']] ?? 0,
           deliveredKg: toDoubleOrNull(i['deliveredWeightKg']),
           differenceReason: i['differenceReason'] as String?,
@@ -579,7 +590,7 @@ class RouteStop {
         customerPhone: customerPhone,
         address: address,
         presaleTotal: presaleTotal,
-        items: reset ? [for (final i in this.items) StopItem(productId: i.productId, productName: i.productName, orderedKg: i.orderedKg, unitPrice: i.unitPrice)] : items ?? this.items,
+        items: reset ? [for (final i in this.items) StopItem(productId: i.productId, productName: i.productName, orderedKg: i.orderedKg, unitPrice: i.unitPrice, orderedCrates: i.orderedCrates)] : items ?? this.items,
         receivedByName: reset ? null : receivedByName ?? this.receivedByName,
         paidAmount: reset ? 0 : paidAmount ?? this.paidAmount,
         paymentMethod: reset ? null : paymentMethod ?? this.paymentMethod,

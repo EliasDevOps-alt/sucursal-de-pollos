@@ -10,7 +10,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 |---|---|---|
 | 6.1 Compras y abastecimiento | ✅ 8 de 8 | El pago de la compra es egreso de caja o banco; a crédito del proveedor queda por pagar |
 | 6.2 Inventario y almacenes | ✅ 10 de 10 | Transferencias con peso recibido, ajustes por conteo, bajas y kardex completo |
-| 6.3 Ventas | 🟡 10 de 11 | Nota de venta imprimible (térmica 80/58 mm o PDF); falta la venta por canastillo |
+| 6.3 Ventas | ✅ 11 de 11 | Por kilo, por canastillo (con el peso real de la balanza) y despiece; nota de venta imprimible |
 | 6.4 Preventas | ✅ 8 de 8 | Incluye edición de pedidos, direcciones adicionales, visitas y mapa de recorrido |
 | 6.5 Logística y distribución | ✅ 12 de 12 | Vehículos, rutas, hoja de carga, entregas offline con firma y GPS, comprobante impreso por Bluetooth y reimpresión |
 | 6.6 Cobranza y crédito | ✅ 10 de 10 | Cobros en oficina y en la calle (app del cobrador offline), mapa, recibo con firma, canastillos y rendición |
@@ -20,7 +20,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 | §8 Apps móviles | ✅ 3 de 3 | Preventista, chofer y cobrador en una sola app por rol, offline, con impresión Bluetooth |
 | §11 Recibos e impresión | ✅ | Venta, entrega, cobro, rendición y cierre de caja; térmica 80/58 mm desde la web y por Bluetooth desde la app; firma en el papel; historial y reimpresión con copias numeradas |
 
-**MVP completo.** Están todos los módulos del alcance, los reportes, la puesta en producción (Docker con HTTPS, respaldo diario, seed de producción, freno a la adivinación de contraseñas) y el material de capacitación ([manual por rol](manual-usuario.md) y [plan de capacitación](capacitacion.md)). Queda fuera solo la venta por canastillo como unidad (hoy se vende por kilo; ver §6.3) y algunas mejoras menores marcadas 🟡.
+**MVP completo.** Están todos los módulos del alcance, los reportes, la puesta en producción (Docker con HTTPS, respaldo diario, seed de producción, freno a la adivinación de contraseñas) y el material de capacitación ([manual por rol](manual-usuario.md) y [plan de capacitación](capacitacion.md)). Incluye también la venta por canastillo, los precios por sucursal desde la pantalla del lote y la sugerencia automática de ascenso de rango.
 
 ## Detalle
 
@@ -50,7 +50,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 - ✅ Ventas en almacén central
 - ✅ Ventas en sucursales con el stock transferido
 - ✅ Clientes registrados y ventas rápidas
-- 🟡 Venta por kilogramo y despiece (como productos) sí; por canastillo no
+- ✅ Venta por kilogramo, por canastillo y despiece (como productos): el producto indica el peso aproximado de un canastillo; se registran los canastillos y el peso real, el precio sigue por kg; los canastillos salen con el cliente y vuelven si se anula; el preventista pide por canastillo y el chofer lo ve en la parada
 - ✅ Nota de venta imprimible (con forma de pago, saldo del cliente y marca de ANULADA si corresponde)
 - ✅ Descuentos automáticos por rango
 - ✅ Ventas a crédito cuando están habilitadas
@@ -113,8 +113,8 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ no hecho
 
 ### 7. Reglas de negocio
 - ✅ 7.1 Lotes, merma y costos: todas (incluye forzar lote con autorización, usuario, fecha y motivo)
-- ✅ 7.2 Precios: por lote, central vs. sucursal (por API), permiso de modificación, precio original y final auditados. 🟡 La pantalla de precios solo edita el precio central
-- 🟡 7.3 Clientes: rangos, descuentos, límites, aprobación de cambio de rango, excepciones, tipos de cliente y cobros sí; sugerencia automática de ascenso no
+- ✅ 7.2 Precios: por lote, central y por sucursal (en la pantalla del lote: fijar, cambiar o quitar para volver al central), permiso de modificación, precio original y final auditados
+- ✅ 7.3 Clientes: rangos, descuentos, límites, aprobación de cambio de rango, excepciones, tipos de cliente y cobros; sugerencia automática de ascenso (compra promedio de 90 días y antigüedad de la deuda, configurable por rango) que aprueba una persona
 - ✅ 7.4 Entregas y rutas: ruta fija al despachar, diferencias y problemas con motivo obligatorio, firma, cobro registrado por el chofer, excesos de crédito marcados para revisión
 - ✅ 7.5 Canastillos: por cantidad y responsable, bajas con motivo, sanciones
 - ✅ 7.6 Anulaciones (sin borrado, con usuario, fecha y motivo) y devoluciones autorizadas

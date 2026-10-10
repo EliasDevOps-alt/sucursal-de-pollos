@@ -445,6 +445,7 @@ model Product {
   brand      String?
   categoryId String   @map("category_id") @db.Uuid
   saleUnit   SaleUnit @default(KG) @map("sale_unit")
+  kgPerCrate Decimal? @map("kg_per_crate") @db.Decimal(8, 3) // si tiene valor, se vende también por canastillo (peso aproximado de uno lleno)
   minStockKg Decimal  @default(0) @map("min_stock_kg") @db.Decimal(14, 3) // alerta de stock bajo (0 = sin alerta)
   isActive   Boolean  @default(true) @map("is_active")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -700,6 +701,8 @@ model CustomerRank {
   code               String     @unique
   discountPercentage Decimal    @default(0) @map("discount_percentage") @db.Decimal(5, 2)
   creditLimit        Decimal    @default(0) @map("credit_limit") @db.Decimal(14, 2)
+  minMonthlyPurchase Decimal    @default(0) @map("min_monthly_purchase") @db.Decimal(14, 2) // compra promedio mensual (90 días) para sugerir el ascenso
+  maxDaysOverdue     Int        @default(30) @map("max_days_overdue") // deuda más antigua permitida para sugerirlo
   description        String?
   isActive           Boolean    @default(true) @map("is_active")
   customers          Customer[]
@@ -811,6 +814,7 @@ model SaleItem {
   productId           String  @map("product_id") @db.Uuid
   requestedWeightKg   Decimal @map("requested_weight_kg") @db.Decimal(14, 3)
   requestedQuantity   Decimal @default(0) @map("requested_quantity") @db.Decimal(14, 3)
+  crates              Int     @default(0) // venta por canastillo: cuántos lleva (el precio sigue siendo por kg)
   originalUnitPrice   Decimal @map("original_unit_price") @db.Decimal(14, 4) // precio sugerido
   unitPrice           Decimal @map("unit_price") @db.Decimal(14, 4) // precio final aplicado
   discountAmount      Decimal @default(0) @map("discount_amount") @db.Decimal(14, 2)
@@ -891,6 +895,7 @@ model PresaleItem {
   presaleId String  @map("presale_id") @db.Uuid
   productId String  @map("product_id") @db.Uuid
   quantity  Decimal @default(0) @db.Decimal(14, 3)
+  crates    Int     @default(0) // pedido por canastillo
   weightKg  Decimal @map("weight_kg") @db.Decimal(14, 3)
   unitPrice Decimal @map("unit_price") @db.Decimal(14, 4)
   subtotal  Decimal @db.Decimal(14, 2)
@@ -1293,6 +1298,7 @@ model RouteStopItem {
   productId         String   @map("product_id") @db.Uuid
   orderedWeightKg   Decimal  @map("ordered_weight_kg") @db.Decimal(14, 3)
   orderedQuantity   Decimal  @default(0) @map("ordered_quantity") @db.Decimal(14, 3)
+  orderedCrates     Int      @default(0) @map("ordered_crates")
   deliveredWeightKg Decimal? @map("delivered_weight_kg") @db.Decimal(14, 3)
   differenceReason  String?  @map("difference_reason")
 

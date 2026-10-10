@@ -32,6 +32,8 @@ export interface Product {
   brand: string | null;
   categoryId: string;
   saleUnit: 'KG' | 'CANASTILLO' | 'UNIDAD';
+  /** Si tiene valor, se vende también por canastillo (peso aproximado de uno lleno). */
+  kgPerCrate: Dec | null;
   minStockKg: Dec;
   isActive: boolean;
   category: Ref;
@@ -110,6 +112,7 @@ export interface LotPrice {
   marginPercentage: Dec;
   isActive: boolean;
   createdAt: string;
+  branchId?: string | null;
   branch?: Ref | null;
   createdBy?: { fullName: string };
 }
@@ -177,6 +180,21 @@ export interface CustomerRank {
   name: string;
   discountPercentage: Dec;
   creditLimit: Dec;
+  /** Compra promedio mensual (90 días) para sugerir el ascenso a este rango. */
+  minMonthlyPurchase: Dec;
+  /** Antigüedad máxima de la deuda para sugerirlo. */
+  maxDaysOverdue: number;
+}
+
+export interface RankSuggestion {
+  customer: { id: string; code: string; name: string };
+  currentRank: { id: string; name: string } | null;
+  suggestedRank: { id: string; name: string; discountPercentage: Dec; creditLimit: Dec; minMonthlyPurchase: Dec };
+  monthlyAverage: Dec;
+  sales: number;
+  oldestDebtDays: number | null;
+  currentCreditLimit: Dec;
+  reason: string;
 }
 
 export interface CustomerAddress {
@@ -309,6 +327,7 @@ export interface SaleDetail extends Omit<SaleListItem, '_count'> {
     id: string;
     product: Ref;
     requestedWeightKg: Dec;
+    crates: number;
     returnedWeightKg: Dec;
     returnedAmount: Dec;
     originalUnitPrice: Dec;
@@ -549,7 +568,7 @@ export interface PresaleDetail extends Omit<PresaleListItem, '_count' | 'sale'> 
   customer: { id: string; code: string; name: string; phone: string | null; creditEnabled: boolean };
   address: CustomerAddress | null;
   sale: { id: string; saleNumber: string; totalAmount: Dec } | null;
-  items: { id: string; productId: string; weightKg: Dec; quantity: Dec; unitPrice: Dec; subtotal: Dec; notes: string | null; product: Ref }[];
+  items: { id: string; productId: string; weightKg: Dec; quantity: Dec; crates: number; unitPrice: Dec; subtotal: Dec; notes: string | null; product: Ref }[];
 }
 
 // ── Cobranza ───────────────────────────────────────────────

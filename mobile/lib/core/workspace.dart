@@ -97,6 +97,7 @@ class Workspace {
                   'productId': i.productId,
                   'weightKg': i.weightKg,
                   if (i.quantity != null) 'quantity': i.quantity,
+                  if (i.crates > 0) 'crates': i.crates,
                   'unitPrice': i.unitPrice,
                 })
             .toList(),
@@ -120,7 +121,7 @@ class Workspace {
     if (items.isEmpty) throw ArgumentError('El pedido no tiene productos');
     final edited = presale.withEdits(items: items, addressId: address?.id, scheduledDeliveryDate: scheduledDeliveryDate, notes: _blankToNull(notes));
     final itemsJson = items
-        .map((i) => {'productId': i.productId, 'weightKg': i.weightKg, if (i.quantity != null) 'quantity': i.quantity, 'unitPrice': i.unitPrice})
+        .map((i) => {'productId': i.productId, 'weightKg': i.weightKg, if (i.quantity != null) 'quantity': i.quantity, if (i.crates > 0) 'crates': i.crates, 'unitPrice': i.unitPrice})
         .toList();
     final pendingCreate = (await db.outbox()).where((o) => o.type == 'PRESALE_CREATE' && o.payload['id'] == presale.id).firstOrNull;
     if (pendingCreate != null) {

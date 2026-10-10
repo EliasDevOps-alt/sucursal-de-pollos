@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { SaleUnit } from '@prisma/client';
-import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Matches, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Matches, Min } from 'class-validator';
 
 const CODE_RULE = /^[A-Z0-9-]{2,20}$/;
 const CODE_MSG = 'El código debe tener 2–20 caracteres: mayúsculas, números o guion';
@@ -51,6 +51,12 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(SaleUnit)
   saleUnit?: SaleUnit;
+
+  @ApiPropertyOptional({ description: 'Peso aproximado de un canastillo lleno: si tiene valor, el producto se vende también por canastillo (null = no)', example: 22 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @IsPositive()
+  kgPerCrate?: number | null;
 
   @ApiPropertyOptional({ description: 'Stock mínimo en kg para alerta (0 = sin alerta)', example: 100 })
   @IsOptional()

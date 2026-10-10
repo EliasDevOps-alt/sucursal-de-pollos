@@ -106,6 +106,26 @@ export class LotsService {
    * Fija el precio por kg del lote (central o de una sucursal). Se puede indicar el precio
    * directamente o el margen sobre el costo real. Desactiva el precio anterior del mismo ámbito.
    */
+  async clearBranchPrice(lotId: string, branchId: string, actorId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.lotPrice.findFirst({ where: { lotId, branchId, isActive: true }, include: { branch: { select: { name: true } } } });
+      if (!current) throw new NotFoundException('La sucursal no tiene un precio propio para este lote');
+      await tx.lotPrice.update({ where: { id: current.id }, data: { isActive: false, validTo: new Date() } });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'lot_prices.clear_branch',
+          entityType: 'lot',
+          entityId: lotId,
+          oldData: { pricePerKg: current.pricePerKg.toFixed(4), branchId, branch: current.branch?.name },
+          reason: 'Vuelve al precio central',
+        },
+        tx,
+      );
+      return { lotId, branchId, cleared: true };
+    });
+  }
+
   async setPrice(lotId: string, dto: SetLotPriceDto, actorId: string) {
     const lot = await this.prisma.lot.findUnique({ where: { id: lotId } });
     if (!lot) throw new NotFoundException('Lote no encontrado');
@@ -117,6 +137,12 @@ export class LotsService {
     const pricePerKg = dto.pricePerKg !== undefined ? perKg(D(dto.pricePerKg)) : suggestedPrice(cost, dto.marginPercentage!);
     const marginPercentage = pricePerKg.minus(cost).div(cost).times(100).toDecimalPlaces(2);
     const branchId = dto.branchId ?? null;
+    if (branchId) {
+      const branch = await this.prisma.branch.findUnique({ where: { id: branchId }, include: { warehouses: { select: { type: true } } } });
+      if (!branch) throw new NotFoundException('Sucursal no encontrada');
+      // La sucursal del almacén central usa el precio central (sin sucursal): no se le fija uno propio.
+      if (branch.warehouses.some((w) => w.type === 'CENTRAL')) throw new BadRequestException('Para la central use el precio central (sin sucursal)');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const previous = await tx.lotPrice.findFirst({ where: { lotId, branchId, isActive: true } });
