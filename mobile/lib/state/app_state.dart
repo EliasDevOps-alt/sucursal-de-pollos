@@ -20,7 +20,7 @@ import '../printing/receipt_doc.dart';
 /// Sin ese parámetro apunta al emulador de Android (que ve la PC como 10.0.2.2).
 /// En la pantalla de ingreso, "Servidor" permite cambiarla.
 const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3000/api');
-const appVersion = '0.5.0';
+const appVersion = '0.5.1';
 
 class AppState extends ChangeNotifier {
   AppState({required this.db, LocationService? location, PrinterService? printer, DateTime Function()? clock})

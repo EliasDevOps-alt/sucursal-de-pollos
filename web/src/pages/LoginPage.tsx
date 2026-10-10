@@ -33,8 +33,8 @@ export function LoginPage() {
   });
 
   return (
-    <Center mih="100vh" p="md" bg="var(--mantine-color-body)">
-      <Paper withBorder shadow="sm" p="xl" w="100%" maw={380}>
+    <Center mih="100vh" p="md" className="login-bg">
+      <Paper withBorder shadow="lg" p="xl" w="100%" maw={380}>
         <form onSubmit={submit}>
           <Stack>
             <div>

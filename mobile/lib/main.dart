@@ -8,6 +8,7 @@ import 'screens/driver/driver_home_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'state/app_state.dart';
+import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,12 +24,12 @@ class PreventaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final seed = const Color(0xFFEB6834);
     return MaterialApp(
       title: 'ERP Pollos · Preventa, entregas y cobranza',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
-      darkTheme: ThemeData(colorSchemeSeed: seed, useMaterial3: true, brightness: Brightness.dark),
+      // Siempre claro, aunque el teléfono esté en modo oscuro.
+      theme: appTheme(),
+      themeMode: ThemeMode.light,
       home: Consumer<AppState>(
         builder: (_, s, __) => !s.loggedIn || s.sessionExpired
             ? const LoginScreen()

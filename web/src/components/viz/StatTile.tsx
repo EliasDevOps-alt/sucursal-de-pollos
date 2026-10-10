@@ -13,7 +13,7 @@ interface Props {
 export function StatTile({ label, value, hint, delta }: Props) {
   const d = delta === null || delta === undefined ? null : Number(delta);
   return (
-    <Card withBorder padding="md">
+    <Card withBorder padding="md" className="stat-tile">
       <Text size="sm" c="dimmed">{label}</Text>
       <Text fz={28} fw={700} mt={2} lh={1.2}>{value}</Text>
       <Group gap={6} mt={4} wrap="nowrap">

@@ -24,10 +24,12 @@ import 'package:erp_preventa/screens/printing/receipt_screen.dart';
 import 'package:erp_preventa/printing/escpos.dart';
 import 'package:erp_preventa/printing/printer_service.dart';
 import 'package:erp_preventa/screens/home_screen.dart';
+import 'package:erp_preventa/screens/login_screen.dart';
 import 'package:erp_preventa/screens/presale_detail_screen.dart';
 import 'package:erp_preventa/screens/presale_form_screen.dart';
 import 'package:erp_preventa/screens/sync_screen.dart';
 import 'package:erp_preventa/state/app_state.dart';
+import 'package:erp_preventa/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -194,7 +196,7 @@ Widget _app(AppState s, Widget home) => ChangeNotifierProvider.value(
       value: s,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(colorSchemeSeed: const Color(0xFFEB6834), useMaterial3: true, fontFamily: 'Roboto'),
+        theme: appTheme(fontFamily: 'Roboto'),
         home: home,
       ),
     );
@@ -229,6 +231,7 @@ void main() {
     await tester.runAsync(() => s.db.close());
   }
 
+  testWidgets('ingreso', (t) => shot(t, 'ingreso', (_) => const LoginScreen()));
   testWidgets('inicio con pedidos', (t) => shot(t, 'home_pedidos', (_) => const HomeScreen()));
   testWidgets('clientes', (t) => shot(t, 'home_clientes', (_) => const HomeScreen(), act: (t) async {
         await t.tap(find.text('Clientes').last);

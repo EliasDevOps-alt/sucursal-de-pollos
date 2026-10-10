@@ -1,0 +1,68 @@
+/* Estilo del panel: claro y con color. Cada módulo tiene su color (menú) y los indicadores llevan un acento. */
+:root {
+  --app-bg: #f5f7fb;
+  --app-header-from: #ff7a1a;
+  --app-header-to: #ffb020;
+}
+
+body {
+  background: var(--app-bg);
+}
+
+/* Encabezado con degradado naranja–ámbar. */
+.app-header {
+  background: linear-gradient(90deg, var(--app-header-from), var(--app-header-to));
+  border-bottom: none !important;
+  color: #fff;
+}
+
+/* Menú lateral blanco; el ítem activo toma el color de su módulo. */
+.app-navbar {
+  background: #fff;
+}
+.app-nav-item {
+  border-radius: var(--mantine-radius-md);
+  font-weight: 500;
+}
+.app-nav-item[data-active] {
+  font-weight: 600;
+}
+
+/* Contenido sobre fondo gris muy claro; tarjetas blancas con sombra suave. */
+.app-main {
+  background: var(--app-bg);
+}
+
+/* Encabezado de tablas en un tono cálido muy claro. */
+.mantine-Table-thead {
+  background: #fff7ed;
+}
+
+/* Indicadores: franja superior de color, en orden fijo azul, verde, violeta, naranja (se repite). */
+.stat-tile {
+  border-top: 4px solid var(--stat-accent, #228be6) !important;
+}
+.mantine-SimpleGrid-root > :nth-child(4n + 1) .stat-tile,
+.mantine-SimpleGrid-root > .stat-tile:nth-child(4n + 1) {
+  --stat-accent: #228be6;
+}
+.mantine-SimpleGrid-root > :nth-child(4n + 2) .stat-tile,
+.mantine-SimpleGrid-root > .stat-tile:nth-child(4n + 2) {
+  --stat-accent: #12b886;
+}
+.mantine-SimpleGrid-root > :nth-child(4n + 3) .stat-tile,
+.mantine-SimpleGrid-root > .stat-tile:nth-child(4n + 3) {
+  --stat-accent: #7950f2;
+}
+.mantine-SimpleGrid-root > :nth-child(4n + 4) .stat-tile,
+.mantine-SimpleGrid-root > .stat-tile:nth-child(4n + 4) {
+  --stat-accent: #fd7e14;
+}
+
+/* Ingreso: fondo de color. */
+.login-bg {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 176, 32, 0.45), transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(255, 224, 102, 0.45), transparent 45%),
+    linear-gradient(135deg, #fff4e6 0%, #fff9db 100%);
+}
