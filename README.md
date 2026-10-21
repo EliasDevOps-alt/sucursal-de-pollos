@@ -37,7 +37,7 @@ npm install
 npm run dev                 # http://localhost:5173 (reenvía /api al backend)
 ```
 
-Usuarios de desarrollo: `admin` / `Admin123!`; `vcentral`, `vsucursal`, `preventista`, `contador`, `chofer`, `cobrador` con `Demo123!`. En producción el seed crea solo `admin`, con la contraseña de `ADMIN_PASSWORD` (ver [docs/despliegue.md](docs/despliegue.md)).
+Usuarios de desarrollo: el ingreso es eligiendo el usuario y escribiendo un PIN de 4 dígitos: `admin` 1234, `vcentral` 1111, `vsucursal` 2222, `preventista` 3333, `contador` 4444, `chofer` 5555, `cobrador` 6666. En producción el seed crea solo `admin`, con el PIN de `ADMIN_PASSWORD` (ver [docs/despliegue.md](docs/despliegue.md)).
 
 ## Datos de demostración
 

@@ -18,6 +18,12 @@ export class AuthController {
     return this.auth.login(dto.username, dto.password, dto.client, ip);
   }
 
+  @Public()
+  @Get('users')
+  loginUsers() {
+    return this.auth.loginUsers();
+  }
+
   @ApiBearerAuth()
   @Get('me')
   me(@CurrentUser() user: AuthUser) {

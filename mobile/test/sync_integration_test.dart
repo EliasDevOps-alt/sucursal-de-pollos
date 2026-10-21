@@ -24,7 +24,7 @@ void main() {
 
   setUpAll(() async {
     online = ApiClient(baseUrl: serverUrl);
-    final res = await online.login('preventista', 'Demo123!');
+    final res = await online.login('preventista', '3333');
     online.token = res['accessToken'] as String;
     // Mismo token, servidor inalcanzable: simula el teléfono sin señal.
     offline = ApiClient(baseUrl: 'http://127.0.0.1:9/api', token: online.token);

@@ -61,7 +61,7 @@ En `.env` complete, como mínimo:
 |---|---|
 | `DOMAIN`, `PUBLIC_URL` | El dominio (`erp.midominio.com`) y su URL con `https://` |
 | `DB_PASSWORD`, `JWT_SECRET` | Claves largas y distintas: `openssl rand -base64 48` |
-| `ADMIN_PASSWORD` | Contraseña inicial del usuario `admin` (mínimo 10 caracteres) |
+| `ADMIN_PASSWORD` | PIN inicial del usuario `admin` (exactamente 4 dígitos) |
 | `SEED_BRANCH_NAME` | Nombre de la sucursal además de la Central (ej. `Sucursal Abasto`) |
 | `BACKUP_HOUR`, `BACKUP_KEEP_DAYS` | Hora del respaldo diario y días que se conservan (por defecto 02:00 y 14) |
 

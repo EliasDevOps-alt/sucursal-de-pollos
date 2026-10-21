@@ -6,8 +6,8 @@ Duración sugerida: **30 minutos** de demo + 15 de preguntas. La idea fuerza: *e
 
 - [ ] Datos frescos que terminan "hoy": `cd backend && npm run demo:data -- --reset` (unos 4 minutos).
 - [ ] Backend (`npm run start:dev`) y panel (`npm run dev -- --host`) encendidos. Ver [despliegue.md](despliegue.md), opción A o C.
-- [ ] Teléfono Android con el APK instalado, en la misma Wi-Fi, con el servidor configurado e ingresado como `preventista` / `Demo123!`. Hacer **una preventa de prueba** para confirmar que sincroniza. Para el reparto y la cobranza, cerrar sesión e ingresar como `chofer` o `cobrador` (clave `Demo123!`), o usar otros teléfonos.
-- [ ] Dos ventanas del navegador: una normal con `admin` / `Admin123!` y una de incógnito con `vcentral` / `Demo123!`.
+- [ ] Teléfono Android con el APK instalado, en la misma Wi-Fi, con el servidor configurado e ingresado como `preventista` (PIN 3333). Hacer **una preventa de prueba** para confirmar que sincroniza. Para el reparto y la cobranza, cerrar sesión e ingresar como `chofer` o `cobrador` (PIN 5555 y 6666), o usar otros teléfonos.
+- [ ] Dos ventanas del navegador: una normal con `admin` (PIN 1234) y una de incógnito con `vcentral` (PIN 1111).
 - [ ] Proyector o pantalla compartida probados; tener a mano el teléfono para mostrarlo a cámara o pasarlo.
 - [ ] Plan B sin internet: la opción A funciona en una red local sin salida a internet (un router propio o el punto de acceso del teléfono).
 
@@ -64,7 +64,7 @@ Los datos de demostración dejan una ruta **en curso** de hoy, con la mitad de l
 
 1. **Logística → Rutas**: la ruta de hoy, *En ruta*. Abrirla: mapa con las paradas numeradas por estado y el recorrido GPS del chofer; **carga por producto** (pedido, cargado, entregado, a bordo).
 2. **Ver entrega** en una parada entregada: lo pedido vs. lo entregado (con el motivo de la diferencia), lo cobrado y la **firma** de quien recibió.
-3. En el teléfono, ingresar con **`chofer` / `Demo123!`**: la app abre en modo **Mis entregas** con la misma ruta. Activar **modo avión**.
+3. En el teléfono, ingresar con **`chofer` (PIN 5555)**: la app abre en modo **Mis entregas** con la misma ruta. Activar **modo avión**.
 4. Tocar una parada pendiente → **Navegar** / **Llamar** → **Entregar**: corregir un peso (pide el motivo), elegir el pago, nombre de quien recibe y **firmar con el dedo** → queda *sin enviar*.
 5. Quitar el modo avión → la parada pasa a *Entregado* con su número de venta. En el panel (se refresca solo) aparece la entrega con la firma.
 6. **Liquidar ruta**: el sistema dice cuánto debería volver de cada lote; se registra lo pesado y lo que falte queda como pérdida. El vehículo queda vacío.
@@ -73,7 +73,7 @@ Los datos de demostración dejan una ruta **en curso** de hoy, con la mitad de l
 ## 4c. Cobranza en la calle y canastillos (5 min) — `admin` + teléfono con `cobrador`
 
 1. **Cobranza → Mapa de pendientes**: clientes con deuda (el color es la antigüedad, el tamaño el monto) y con canastillos por recoger. "Así se arma la ronda del cobrador."
-2. En el teléfono, ingresar con **`cobrador` / `Demo123!`**: **Por cobrar** ordenado por monto o por días. Activar **modo avión**.
+2. En el teléfono, ingresar con **`cobrador` (PIN 6666)**: **Por cobrar** ordenado por monto o por días. Activar **modo avión**.
 3. Elegir un cliente → monto (o **Todo**), método, **canastillos que devuelve**, quién paga y **firma** → queda *sin enviar* en **Mis cobros**, con el total del día por método.
 4. Quitar el modo avión → el cobro recibe su **número de recibo** (R-…). En la web, **Cobranza → Cobros → ver recibo**: monto, firma, quién pagó y dónde.
 5. **Canastillos**: cuántos hay y quién los tiene (almacenes, vehículo, clientes, chofer y cobrador). En **Movimientos** se ve cada entrega, recojo y faltante con su ruta. Mostrar una **Baja** de canastillos perdidos con **sanción** al cliente: se suma a su deuda.

@@ -124,7 +124,7 @@ export function ReturnModal({ sale, opened, onClose }: { sale: SaleDetail; opene
             <Text size="xs" mb="xs">Ingrese las credenciales de un supervisor con permiso para autorizar devoluciones:</Text>
             <Group grow>
               <TextInput size="xs" placeholder="Usuario" autoComplete="off" value={supervisor.username} onChange={(e) => setSupervisor((s) => ({ ...s, username: e.currentTarget.value }))} />
-              <PasswordInput size="xs" placeholder="Contraseña" autoComplete="new-password" value={supervisor.password} onChange={(e) => setSupervisor((s) => ({ ...s, password: e.currentTarget.value }))} />
+              <PasswordInput size="xs" placeholder="PIN" maxLength={4} inputMode="numeric" autoComplete="new-password" value={supervisor.password} onChange={(e) => setSupervisor((s) => ({ ...s, password: e.currentTarget.value }))} />
             </Group>
           </Alert>
         )}

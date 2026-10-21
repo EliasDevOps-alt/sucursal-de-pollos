@@ -33,10 +33,10 @@ void main() {
   sqfliteFfiInit();
 
   test('chofer: recibe la ruta, entrega y registra un fallo sin señal, y sincroniza una sola vez', () async {
-    final admin = (await ApiClient(baseUrl: serverUrl).login('admin', 'Admin123!'))['accessToken'] as String;
-    final pre = (await ApiClient(baseUrl: serverUrl).login('preventista', 'Demo123!'))['accessToken'] as String;
+    final admin = (await ApiClient(baseUrl: serverUrl).login('admin', '1234'))['accessToken'] as String;
+    final pre = (await ApiClient(baseUrl: serverUrl).login('preventista', '3333'))['accessToken'] as String;
     final online = ApiClient(baseUrl: serverUrl);
-    online.token = (await online.login('chofer', 'Demo123!'))['accessToken'] as String;
+    online.token = (await online.login('chofer', '5555'))['accessToken'] as String;
     final offline = ApiClient(baseUrl: 'http://127.0.0.1:9/api', token: online.token);
     final device = 'flutter-chofer-${const Uuid().v4()}';
     const uuid = Uuid();

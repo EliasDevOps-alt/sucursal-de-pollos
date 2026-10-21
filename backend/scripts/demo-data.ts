@@ -199,14 +199,14 @@ async function main() {
   await prisma.$executeRawUnsafe(`UPDATE customer_types SET is_active = true`);
   await prisma.$executeRawUnsafe(`UPDATE users SET is_active = true`);
 
-  const admin = await login('admin', 'Admin123!');
-  const seller = await login('vcentral', 'Demo123!');
-  const branchSeller = await login('vsucursal', 'Demo123!');
+  const admin = await login('admin', '1234');
+  const seller = await login('vcentral', '1111');
+  const branchSeller = await login('vsucursal', '2222');
   // La sucursal pesa lo que recibe: así las transferencias muestran diferencias reales.
   await prisma.branch.update({ where: { code: 'SUC1' }, data: { transferWeighingEnabled: true } });
-  const preseller = await login('preventista', 'Demo123!', 'mobile');
-  const driver = await login('chofer', 'Demo123!', 'mobile');
-  const ADMIN_AUTH = { username: 'admin', password: 'Admin123!' };
+  const preseller = await login('preventista', '3333', 'mobile');
+  const driver = await login('chofer', '5555', 'mobile');
+  const ADMIN_AUTH = { username: 'admin', password: '1234' };
 
   const products: any[] = await api('GET', '/products', admin);
   const suppliers: any[] = await api('GET', '/suppliers', admin);
@@ -261,7 +261,7 @@ async function main() {
   ];
   const drivers: any[] = await api('GET', '/routes/drivers', admin);
   const driverId = drivers.find((x) => x.username === 'chofer')!.id;
-  const collector = await login('cobrador', 'Demo123!', 'mobile');
+  const collector = await login('cobrador', '6666', 'mobile');
 
   // Canastillos del negocio: inventario inicial en el central y una parte en la sucursal.
   await api('POST', '/crates/movements', admin, { type: 'INITIAL', quantity: 220, to: { type: 'WAREHOUSE', id: central.id }, reason: 'Inventario inicial de canastillos' });
@@ -463,7 +463,7 @@ async function main() {
   console.log(`  ${stats.purchases} compras · ${stats.sales} ventas (${stats.credit} con crédito) · ${stats.presales} preventas (${stats.attended} atendidas, ${pendingNow} pendientes)`);
   console.log(`  Ventas confirmadas: Bs ${Number(revenue).toFixed(2)} · Por cobrar: Bs ${Number(debt).toFixed(2)} · Stock: ${Number(stock).toFixed(1)} kg`);
   console.log(`  ${stats.transfers} transferencias a la sucursal · ${stats.branchSales} ventas en sucursal`);
-  const money: any = await api('GET', '/cash/summary', await login('admin', 'Admin123!'));
+  const money: any = await api('GET', '/cash/summary', await login('admin', '1234'));
   console.log(`  Efectivo en cajas: Bs ${Number(money.cashOnHand).toFixed(2)} · Banco: Bs ${Number(money.inBank).toFixed(2)} · Por rendir: Bs ${(Number(money.pendingSettlement.cash) + Number(money.pendingSettlement.digital)).toFixed(2)} · Por pagar a proveedores: Bs ${Number(money.supplierPayables.amount).toFixed(2)}`);
   console.log(`  ${stats.routes} rutas de entrega · ${stats.failedStops} paradas no entregadas · ${stats.collections} cobros en la calle`);
   const prints = await prisma.receiptPrint.groupBy({ by: ['channel'], _count: true });

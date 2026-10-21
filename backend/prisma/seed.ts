@@ -77,15 +77,15 @@ async function seedOrganization() {
 
 async function seedUsers(branch1Id: string) {
   const roles = Object.fromEntries((await prisma.role.findMany()).map((r) => [r.code, r.id]));
-  const adminPassword = PRODUCTION ? process.env.ADMIN_PASSWORD! : 'Admin123!';
+  const adminPassword = PRODUCTION ? process.env.ADMIN_PASSWORD! : '1234';
   const demo = [
     { username: 'admin', password: adminPassword, fullName: 'Administrador General', role: 'ADMIN' },
-    { username: 'vcentral', password: 'Demo123!', fullName: 'Vendedor Central Demo', role: 'SELLER_CENTRAL' },
-    { username: 'vsucursal', password: 'Demo123!', fullName: 'Vendedor Sucursal Demo', role: 'SELLER_BRANCH', branchId: branch1Id },
-    { username: 'preventista', password: 'Demo123!', fullName: 'Preventista Demo', role: 'PRESELLER' },
-    { username: 'contador', password: 'Demo123!', fullName: 'Contador Demo', role: 'ACCOUNTANT' },
-    { username: 'chofer', password: 'Demo123!', fullName: 'Chofer Demo', role: 'DRIVER' },
-    { username: 'cobrador', password: 'Demo123!', fullName: 'Cobrador Demo', role: 'COLLECTOR' },
+    { username: 'vcentral', password: '1111', fullName: 'Vendedor Central Demo', role: 'SELLER_CENTRAL' },
+    { username: 'vsucursal', password: '2222', fullName: 'Vendedor Sucursal Demo', role: 'SELLER_BRANCH', branchId: branch1Id },
+    { username: 'preventista', password: '3333', fullName: 'Preventista Demo', role: 'PRESELLER' },
+    { username: 'contador', password: '4444', fullName: 'Contador Demo', role: 'ACCOUNTANT' },
+    { username: 'chofer', password: '5555', fullName: 'Chofer Demo', role: 'DRIVER' },
+    { username: 'cobrador', password: '6666', fullName: 'Cobrador Demo', role: 'COLLECTOR' },
   ];
   // En producción solo el administrador; el resto del personal lo crea él en Administración → Usuarios.
   const users: { username: string; password: string; fullName: string; role: string; branchId?: string }[] = PRODUCTION ? demo.slice(0, 1) : demo;
@@ -179,8 +179,8 @@ async function seedCatalogs() {
 
 async function main() {
   // Se valida antes de tocar la base: un seed a medias dejaría la sucursal con el nombre por defecto.
-  if (PRODUCTION && (process.env.ADMIN_PASSWORD ?? '').length < 10) {
-    throw new Error('Defina ADMIN_PASSWORD (al menos 10 caracteres) para crear el administrador en producción');
+  if (PRODUCTION && !/^\d{4}$/.test(process.env.ADMIN_PASSWORD ?? '')) {
+    throw new Error('Defina ADMIN_PASSWORD con el PIN de 4 dígitos del administrador para crear el administrador en producción');
   }
   await seedSecurity();
   const { branch1 } = await seedOrganization();

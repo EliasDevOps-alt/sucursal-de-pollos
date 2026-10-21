@@ -436,7 +436,7 @@ export function SaleNewPage() {
                             <Text size="xs" c="dimmed">Ingrese las credenciales de un supervisor con permiso:</Text>
                             <Group grow>
                               <TextInput size="xs" placeholder="Usuario" value={supervisor.username} onChange={(e) => setSupervisor((s) => ({ ...s, username: e.currentTarget.value }))} autoComplete="off" />
-                              <PasswordInput size="xs" placeholder="Contraseña" value={supervisor.password} onChange={(e) => setSupervisor((s) => ({ ...s, password: e.currentTarget.value }))} autoComplete="new-password" />
+                              <PasswordInput size="xs" placeholder="PIN" maxLength={4} inputMode="numeric" value={supervisor.password} onChange={(e) => setSupervisor((s) => ({ ...s, password: e.currentTarget.value }))} autoComplete="new-password" />
                             </Group>
                           </>
                         )}

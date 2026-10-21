@@ -9,9 +9,9 @@ export class CreateUserDto {
   })
   username: string;
 
-  @ApiProperty({ example: 'Clave123!' })
+  @ApiProperty({ example: '1234', description: 'PIN de 4 dígitos' })
   @IsString()
-  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  @Matches(/^\d{4}$/, { message: 'El PIN debe tener exactamente 4 dígitos' })
   password: string;
 
   @ApiProperty({ example: 'Juan Pérez' })
@@ -48,9 +48,9 @@ export class UpdateUserDto extends PartialType(OmitType(CreateUserDto, ['usernam
 }
 
 export class ResetPasswordDto {
-  @ApiProperty()
+  @ApiProperty({ example: '1234', description: 'PIN de 4 dígitos' })
   @IsString()
-  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  @Matches(/^\d{4}$/, { message: 'El PIN debe tener exactamente 4 dígitos' })
   password: string;
 }
 

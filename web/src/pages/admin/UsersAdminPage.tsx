@@ -42,7 +42,7 @@ export function UsersAdminPage() {
     initialValues: empty,
     validate: {
       username: (v) => (!isNew || /^[a-z0-9._-]{3,30}$/.test(v) ? null : '3–30 caracteres: minúsculas, números, punto o guion'),
-      password: (v) => (!isNew || v.length >= 8 ? null : 'Al menos 8 caracteres'),
+      password: (v) => (!isNew || /^\d{4}$/.test(v) ? null : 'El PIN debe tener 4 dígitos'),
       fullName: (v) => (v.trim().length >= 3 ? null : 'Nombre completo'),
       roleId: (v) => (v ? null : 'Elija el rol'),
     },
@@ -77,7 +77,7 @@ export function UsersAdminPage() {
   const resetPwd = useMutation({
     mutationFn: async () => api.post(`/users/${pwdFor!.id}/password`, { password: newPwd }),
     onSuccess: () => {
-      notifyOk('Contraseña actualizada');
+      notifyOk('PIN actualizado');
       setPwdFor(null);
       setNewPwd('');
     },
@@ -142,7 +142,7 @@ export function UsersAdminPage() {
                           </Menu.Target>
                           <Menu.Dropdown>
                             <Menu.Item leftSection={<IconEdit size={14} />} onClick={() => open(u)}>Editar datos y rol</Menu.Item>
-                            <Menu.Item leftSection={<IconKey size={14} />} onClick={() => setPwdFor(u)}>Cambiar contraseña</Menu.Item>
+                            <Menu.Item leftSection={<IconKey size={14} />} onClick={() => setPwdFor(u)}>Cambiar PIN</Menu.Item>
                             {u.id !== me?.id && (
                               <Menu.Item
                                 color={u.isActive ? 'red' : undefined}
@@ -170,7 +170,7 @@ export function UsersAdminPage() {
             {isNew && (
               <SimpleGrid cols={2}>
                 <TextInput label="Usuario (para ingresar)" withAsterisk autoComplete="off" {...form.getInputProps('username')} />
-                <PasswordInput label="Contraseña inicial" withAsterisk autoComplete="new-password" {...form.getInputProps('password')} />
+                <PasswordInput label="PIN inicial (4 dígitos)" withAsterisk maxLength={4} inputMode="numeric" autoComplete="new-password" {...form.getInputProps('password')} />
               </SimpleGrid>
             )}
             <TextInput label="Nombre completo" withAsterisk {...form.getInputProps('fullName')} />
@@ -200,10 +200,10 @@ export function UsersAdminPage() {
         </form>
       </Modal>
 
-      <Modal opened={!!pwdFor} onClose={() => setPwdFor(null)} title={`Nueva contraseña para ${pwdFor?.fullName ?? ''}`}>
+      <Modal opened={!!pwdFor} onClose={() => setPwdFor(null)} title={`Nuevo PIN para ${pwdFor?.fullName ?? ''}`}>
         <Stack>
-          <PasswordInput label="Contraseña" description="Al menos 8 caracteres" value={newPwd} onChange={(e) => setNewPwd(e.currentTarget.value)} autoComplete="new-password" />
-          <Button disabled={newPwd.length < 8} loading={resetPwd.isPending} onClick={() => resetPwd.mutate()}>Guardar contraseña</Button>
+          <PasswordInput label="PIN" description="4 dígitos" maxLength={4} inputMode="numeric" value={newPwd} onChange={(e) => setNewPwd(e.currentTarget.value.replace(/\D/g, ""))} autoComplete="new-password" />
+          <Button disabled={newPwd.length !== 4} loading={resetPwd.isPending} onClick={() => resetPwd.mutate()}>Guardar PIN</Button>
         </Stack>
       </Modal>
     </>

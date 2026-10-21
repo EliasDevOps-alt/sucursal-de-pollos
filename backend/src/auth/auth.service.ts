@@ -36,6 +36,16 @@ export class AuthService {
     return { accessToken, user };
   }
 
+  /** Usuarios activos para la pantalla de ingreso (solo nombre visible y rol; nunca datos de contacto). */
+  async loginUsers() {
+    const users = await this.prisma.user.findMany({
+      where: { isActive: true, role: { isActive: true } },
+      select: { username: true, fullName: true, role: { select: { code: true, name: true } } },
+      orderBy: { fullName: 'asc' },
+    });
+    return users.map((u) => ({ username: u.username, fullName: u.fullName, roleCode: u.role.code, roleName: u.role.name }));
+  }
+
   /** Devuelve el usuario si las credenciales son válidas y está activo; si no, null. */
   async verifyCredentials(username: string, password: string): Promise<AuthUser | null> {
     const key = username.trim().toLowerCase();

@@ -29,7 +29,7 @@ En la pantalla de ingreso, **Servidor** permite configurar la API:
 - Teléfono real en la misma red Wi-Fi que la PC: `http://IP-DE-LA-PC:3000/api` (el firewall de Windows debe permitir el puerto 3000)
 - Servidor en la nube: `https://su-dominio/api`
 
-Usuario de demo: `preventista` / `Demo123!`.
+Usuario de demo: `preventista` (PIN 3333).
 
 ### Si la compilación falla con `PKIX path building failed`
 

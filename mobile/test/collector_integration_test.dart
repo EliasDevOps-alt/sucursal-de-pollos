@@ -32,9 +32,9 @@ void main() {
   sqfliteFfiInit();
 
   test('cobrador: cobra y recoge canastillos sin señal, y sincroniza una sola vez', () async {
-    final admin = (await ApiClient(baseUrl: serverUrl).login('admin', 'Admin123!'))['accessToken'] as String;
+    final admin = (await ApiClient(baseUrl: serverUrl).login('admin', '1234'))['accessToken'] as String;
     final online = ApiClient(baseUrl: serverUrl);
-    online.token = (await online.login('cobrador', 'Demo123!'))['accessToken'] as String;
+    online.token = (await online.login('cobrador', '6666'))['accessToken'] as String;
     final offline = ApiClient(baseUrl: 'http://127.0.0.1:9/api', token: online.token);
     final device = 'flutter-cobrador-${const Uuid().v4()}';
 
