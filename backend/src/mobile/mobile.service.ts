@@ -183,6 +183,12 @@ export class MobileService {
       include: { customer: { select: { id: true, name: true } } },
       orderBy: { paymentDate: 'desc' },
     });
+    const pickups = await this.prisma.crateMovement.groupBy({
+      by: ['referenceId'],
+      where: { referenceType: 'collection', referenceId: { in: rows.map((p) => p.id) }, type: 'PICKUP' },
+      _sum: { quantity: true },
+    });
+    const cratesByPayment = new Map(pickups.map((m) => [m.referenceId, m._sum.quantity ?? 0]));
     return rows.map((p) => ({
       id: p.id,
       receiptNumber: p.receiptNumber,
@@ -192,6 +198,7 @@ export class MobileService {
       paymentMethod: p.paymentMethod,
       status: p.status,
       isAdvance: p.isAdvance,
+      cratesPickedUp: cratesByPayment.get(p.id) ?? 0,
       collectedAt: p.collectedAtDevice ?? p.paymentDate,
     }));
   }

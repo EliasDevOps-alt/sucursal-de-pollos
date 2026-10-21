@@ -724,6 +724,7 @@ class Collection {
         receiptNumber: j['receiptNumber'] as String?,
         status: (j['status'] ?? 'VALID') as String,
         isAdvance: j['isAdvance'] == true,
+        cratesPickedUp: (j['cratesPickedUp'] as num?)?.toInt() ?? 0,
       );
 
   factory Collection.fromJson(Map<String, dynamic> j) => Collection(

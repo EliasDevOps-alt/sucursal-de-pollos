@@ -19,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   late final TextEditingController _url;
   bool _busy = false;
   bool _showServer = false;
+  bool _hidePass = true;
   String? _error;
 
   @override
@@ -101,8 +102,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _pass,
-                          obscureText: true,
-                          decoration: const InputDecoration(labelText: 'Contraseña', border: OutlineInputBorder()),
+                          obscureText: _hidePass,
+                          decoration: InputDecoration(
+                            labelText: 'Contraseña',
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              tooltip: _hidePass ? 'Mostrar contraseña' : 'Ocultar contraseña',
+                              icon: Icon(_hidePass ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                              onPressed: () => setState(() => _hidePass = !_hidePass),
+                            ),
+                          ),
                           validator: (v) => (v == null || v.isEmpty) ? 'Ingrese su contraseña' : null,
                           onFieldSubmitted: (_) => _submit(),
                         ),

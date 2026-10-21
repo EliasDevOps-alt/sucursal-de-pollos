@@ -48,7 +48,7 @@ export function ReceptionForm({ purchase }: { purchase: PurchaseDetail }) {
       notes: '',
       items: purchase.items.map<Line>((i) => ({
         purchaseItemId: i.id,
-        receivedWeightKg: '',
+        receivedWeightKg: Number(i.purchasedWeightKg) || '',
         canastilloWeightKg: 0,
         receivedQuantity: Number(i.purchasedQuantity) || '',
         expiryDate: inDays(7),
@@ -94,11 +94,13 @@ export function ReceptionForm({ purchase }: { purchase: PurchaseDetail }) {
         <Stack>
           <Group gap="xs">
             <IconScale size={20} />
-            <Text fw={600}>Recepción con peso real</Text>
+            <Text fw={600}>Confirmar que llegó la mercadería</Text>
           </Group>
-          <Alert variant="light" color="blue">
-            Ingrese el peso bruto de la balanza y la tara de los canastillos. La diferencia con lo comprado es la
-            merma. Administración decide si se <b>absorbe como pérdida</b> o se <b>incorpora al costo</b> del lote.
+          <Alert variant="light" color="blue" title="¿Ya llegó el pedido?">
+            Ponga la mercadería en la balanza y revise el peso. Si <b>coincide con lo comprado</b>, solo presione
+            <b> Confirmar</b>: ya está, el producto queda listo para vender. Si pesó <b>menos</b>, cambie el peso por el
+            real. La diferencia es la <b>merma</b> y usted elige si se registra como pérdida o se suma al costo.
+            Si el pedido todavía no llegó, deje esta compra así y vuelva cuando llegue.
           </Alert>
           <Table.ScrollContainer minWidth={1100}>
             <Table verticalSpacing="sm">
@@ -156,7 +158,7 @@ export function ReceptionForm({ purchase }: { purchase: PurchaseDetail }) {
           <Textarea label="Observaciones de la recepción" autosize minRows={2} {...form.getInputProps('notes')} />
           <Group justify="flex-end">
             <Button type="submit" loading={receive.isPending} leftSection={<IconScale size={16} />}>
-              Confirmar recepción y crear lotes
+              Confirmar recepción
             </Button>
           </Group>
         </Stack>
